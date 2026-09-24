@@ -1,6 +1,13 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? "/api" : "https://testing.api.gurudock.com");
+const API_BASE_URL = (import.meta.env.VITE_API_URL || "/api").replace(/\/+$/, "");
 
 let refreshRequest = null;
+
+function isNetworkError(error) {
+  return error?.name === "TypeError"
+    || error?.message === "Failed to fetch"
+    || error?.message === "NetworkError"
+    || navigator.onLine === false;
+}
 
 function clearStoredSession() {
   localStorage.removeItem("access_token");
@@ -30,7 +37,7 @@ async function refreshAccessToken() {
       return data.access_token;
     })
     .catch((error) => {
-      clearStoredSession();
+      if (!isNetworkError(error)) clearStoredSession();
       throw error;
     })
     .finally(() => {
@@ -54,9 +61,11 @@ export async function validateStoredSession() {
     await refreshAccessToken();
     window.dispatchEvent(new Event("auth-changed"));
     return true;
-  } catch {
-    clearStoredSession();
-    window.dispatchEvent(new Event("auth-changed"));
+  } catch (error) {
+    if (!isNetworkError(error)) {
+      clearStoredSession();
+      window.dispatchEvent(new Event("auth-changed"));
+    }
     return false;
   }
 }

@@ -1,24 +1,19 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import logoUrl from "./assets/gurudock-logo.png";
-import { authenticatedFetch } from "./apiClient";
+import { API_BASE_URL, authenticatedFetch } from "./apiClient";
+import { readAvailableContentCache, writeAvailableContentCache } from "./availableContentCache";
 import { DocumentPreview, handleWorkspaceWheel, mapLibraryItem } from "./LibraryPage";
 import { BriefingPreview } from "./BriefingPage";
 import LibrarySidebar from "./LibrarySidebar";
-
-const LIBRARY_API_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? "/api" : "https://testing.api.gurudock.com");
-const LIBRARY_CACHE_KEY = "gurudock_library_cache";
-const LIBRARY_CACHE_TTL = 24 * 60 * 60 * 1000;
+import {
+  readCachedLibraryDocument,
+  readLibraryCache,
+  updateCachedLibraryDocument,
+  writeLibraryCache,
+} from "./libraryCache";
 
 function readHomeLibraryCache() {
-  try {
-    const user = localStorage.getItem("user_email") || localStorage.getItem("user_name") || "authenticated";
-    const cache = JSON.parse(localStorage.getItem(`${LIBRARY_CACHE_KEY}:${user.toLowerCase()}`) || "{}");
-    const entry = cache[""];
-    if (!entry || Date.now() - entry.cachedAt > LIBRARY_CACHE_TTL || !Array.isArray(entry.documents)) return [];
-    return entry.documents.slice(0, 4);
-  } catch {
-    return [];
-  }
+  return readLibraryCache("").slice(0, 4).map(mapLibraryItem);
 }
 
 const createItems = [
@@ -29,10 +24,9 @@ const createItems = [
 ];
 
 const classroomItems = [
-  ["Students & marks", "3 classes · 118 students"],
+  ["Students & marks", "Manage your classes and students"],
   ["Time table", "Plan your class schedule"],
-  ["Analytics", "Last test: 72% avg"],
-  ["Parent messages", "Remarks & notices"],
+  ["Tests", "Create tests and enter marks"],
 ];
 
 export default function HomePage() {
@@ -54,8 +48,6 @@ export default function HomePage() {
   const [generatedBriefing, setGeneratedBriefing] = useState(null);
   const [briefingGenerationLoading, setBriefingGenerationLoading] = useState(false);
   const [briefingGenerationError, setBriefingGenerationError] = useState("");
-  const date = new Date();
-
   useEffect(() => {
     const syncUser = () => setUserName(localStorage.getItem("user_name") || "Teacher");
     window.addEventListener("auth-changed", syncUser);
@@ -64,22 +56,24 @@ export default function HomePage() {
 
   useEffect(() => {
     const controller = new AbortController();
+    const applyCurriculum = (data) => {
+      const nextBoard = Object.keys(data).includes("CBSE") ? "CBSE" : Object.keys(data)[0] || "";
+      const grades = nextBoard ? Object.keys(data[nextBoard] || {}).sort((a, b) => Number(a) - Number(b)) : [];
+      const nextClass = grades.includes("10") ? "Class 10" : grades[0] ? `Class ${grades[0]}` : "";
+      const subjects = nextClass ? data[nextBoard]?.[nextClass.replace("Class ", "")] || [] : [];
+      setBriefingCurriculum(data);
+      setBriefingBoard(nextBoard);
+      setBriefingForm((current) => ({ ...current, className: current.className || nextClass, subject: current.subject || subjects[0] || "" }));
+    };
+    const cachedCurriculum = readAvailableContentCache();
+    if (cachedCurriculum) applyCurriculum(cachedCurriculum);
     const loadCurriculum = async () => {
       try {
-        const response = await fetch(`${LIBRARY_API_URL}/content/available-content`, { signal: controller.signal });
+        const response = await fetch(`${API_BASE_URL}/content/available-content`, { signal: controller.signal });
         const data = await response.json().catch(() => ({}));
         if (!response.ok || !data || typeof data !== "object" || Array.isArray(data)) throw new Error("Unable to load curriculum.");
-        const nextBoard = Object.keys(data).includes("CBSE") ? "CBSE" : Object.keys(data)[0] || "";
-        const grades = nextBoard ? Object.keys(data[nextBoard] || {}).sort((a, b) => Number(a) - Number(b)) : [];
-        const nextClass = grades.includes("10") ? "Class 10" : grades[0] ? `Class ${grades[0]}` : "";
-        const subjects = nextClass ? data[nextBoard]?.[nextClass.replace("Class ", "")] || [] : [];
-        setBriefingCurriculum(data);
-        setBriefingBoard(nextBoard);
-        setBriefingForm((current) => ({
-          ...current,
-          className: current.className || nextClass,
-          subject: current.subject || subjects[0] || "",
-        }));
+        writeAvailableContentCache(data);
+        applyCurriculum(data);
       } catch (error) {
         if (error.name !== "AbortError") setBriefingLoading(false);
       } finally {
@@ -104,7 +98,7 @@ export default function HomePage() {
     const loadChapters = async () => {
       setBriefingChaptersLoading(true);
       try {
-        const response = await fetch(`${LIBRARY_API_URL}/content/chapters-topics`, {
+        const response = await fetch(`${API_BASE_URL}/content/chapters-topics`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ board: briefingBoard, grade, subject: briefingForm.subject, book_name: "" }),
@@ -135,10 +129,12 @@ export default function HomePage() {
     }
     const loadDocuments = async () => {
       try {
-        const response = await authenticatedFetch(`${LIBRARY_API_URL}/api/library?page=1&limit=4`);
+        const response = await authenticatedFetch(`${API_BASE_URL}/api/library?page=1&limit=4`);
         const data = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Unable to load documents.");
-        if (active) setDocuments((data.items || []).map(mapLibraryItem));
+        const nextDocuments = (data.items || []).map(mapLibraryItem);
+        writeLibraryCache("", nextDocuments);
+        if (active) setDocuments(nextDocuments);
       } catch (error) {
         if (active) setDocumentsError(error.message || "Unable to load documents.");
       } finally {
@@ -150,36 +146,52 @@ export default function HomePage() {
   }, []);
 
   const openDocument = async (document) => {
-    setSelectedDocument(document);
-    setDocumentDetails(null);
+    const cachedDocument = readCachedLibraryDocument(document.id);
+    const sourceDocument = { ...document, ...cachedDocument };
+    const hasCachedContent = sourceDocument.body !== undefined
+      || sourceDocument.data !== undefined
+      || Array.isArray(sourceDocument.questions)
+      || Array.isArray(sourceDocument.periods)
+      || Array.isArray(sourceDocument.sections)
+      || Array.isArray(sourceDocument.content);
+    const cachedDetails = hasCachedContent
+      ? {
+        ...sourceDocument,
+        body: sourceDocument.body ?? sourceDocument.data?.body ?? sourceDocument.data ?? sourceDocument.content,
+        content_type: sourceDocument.content_type,
+      }
+      : null;
+    setSelectedDocument(sourceDocument);
+    setDocumentDetails(cachedDetails);
     setDetailsError("");
-    setDetailsLoading(true);
+    setDetailsLoading(!cachedDetails);
     setPreviewOpen(true);
     try {
       const response = await authenticatedFetch(
-        `${LIBRARY_API_URL}/api/library/${encodeURIComponent(document.content_type)}/${encodeURIComponent(document.id)}`,
+        `${API_BASE_URL}/api/library/${encodeURIComponent(sourceDocument.content_type)}/${encodeURIComponent(sourceDocument.id)}`,
       );
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Unable to load document details.");
-      let body = data.body;
+      let body = data.body ?? data.data?.body ?? sourceDocument.body ?? sourceDocument.data?.body ?? sourceDocument.data;
       if (typeof body === "string") {
         try { body = JSON.parse(body); } catch { /* Keep text bodies unchanged. */ }
       }
-      setDocumentDetails({ ...data, body, content_type: data.content_type || document.content_type });
+      const nextDetails = {
+        ...sourceDocument,
+        ...data,
+        body,
+        content_type: data.content_type || sourceDocument.content_type,
+      };
+      setDocumentDetails(nextDetails);
+      updateCachedLibraryDocument(nextDetails);
     } catch (error) {
-      setDetailsError(error.message || "Unable to load document details.");
+      if (!cachedDetails) setDetailsError(error.message || "Unable to load document details.");
     } finally {
-      setDetailsLoading(false);
+      if (!cachedDetails) setDetailsLoading(false);
     }
   };
 
   const initials = userName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
-  const formattedDate = new Intl.DateTimeFormat("en-IN", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  }).format(date);
-
   const updateBriefingField = (field, value) => {
     setBriefingForm((current) => ({ ...current, [field]: value }));
   };
@@ -190,7 +202,7 @@ export default function HomePage() {
     setBriefingGenerationError("");
     localStorage.setItem("briefing_context", JSON.stringify(briefingForm));
     try {
-      const response = await authenticatedFetch(`${LIBRARY_API_URL}/briefing/pull/stand_alone`, {
+      const response = await authenticatedFetch(`${API_BASE_URL}/briefing/pull/stand_alone`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: {
@@ -236,7 +248,6 @@ export default function HomePage() {
             <strong>GuruDock</strong>
           </a>
           <div className="home-topbar-user">
-            <span className="home-topbar-date">{formattedDate}, 2026</span>
             <span className="home-avatar">{initials || "T"}</span>
             <strong>{userName}</strong>
           </div>
@@ -253,28 +264,18 @@ export default function HomePage() {
             <form className="home-briefing-form" onSubmit={generateBriefing}>
               <label>
                 <span>Class</span>
-                <select value={briefingForm.className} onChange={(event) => {
-                  const nextClass = event.target.value;
+                <HomeThemedSelect value={briefingForm.className} onChange={(nextClass) => {
                   const subjects = briefingCurriculum[briefingBoard]?.[nextClass.replace("Class ", "")] || [];
                   setBriefingForm((current) => ({ ...current, className: nextClass, subject: subjects[0] || "", chapter: "" }));
-                }} required disabled={briefingLoading}>
-                  <option value="" disabled>Select class</option>
-                  {briefingClassOptions.map((option) => <option key={option}>{option}</option>)}
-                </select>
+                }} options={[{ value: "", label: "Select class" }, ...briefingClassOptions]} ariaLabel="Select class" disabled={briefingLoading} />
               </label>
               <label>
                 <span>Subject</span>
-                <select value={briefingForm.subject} onChange={(event) => setBriefingForm((current) => ({ ...current, subject: event.target.value, chapter: "" }))} required disabled={briefingLoading}>
-                  <option value="" disabled>Select subject</option>
-                  {briefingSubjectOptions.map((option) => <option key={option}>{option}</option>)}
-                </select>
+                <HomeThemedSelect value={briefingForm.subject} onChange={(subject) => setBriefingForm((current) => ({ ...current, subject, chapter: "" }))} options={[{ value: "", label: "Select subject" }, ...briefingSubjectOptions]} ariaLabel="Select subject" disabled={briefingLoading} />
               </label>
               <label>
                 <span>Chapter</span>
-                <select value={briefingForm.chapter} onChange={(event) => updateBriefingField("chapter", event.target.value)} required disabled={briefingChaptersLoading || !briefingChapters.length}>
-                  <option value="" disabled>{briefingChaptersLoading ? "Loading chapters..." : "Select chapter"}</option>
-                  {briefingChapters.map((option) => <option key={option}>{option}</option>)}
-                </select>
+                <HomeThemedSelect value={briefingForm.chapter} onChange={(chapter) => updateBriefingField("chapter", chapter)} options={[{ value: "", label: briefingChaptersLoading ? "Loading chapters..." : "Select chapter" }, ...briefingChapters]} ariaLabel="Select chapter" disabled={briefingChaptersLoading || !briefingChapters.length} />
               </label>
               <button className="home-briefing-button" type="submit">Generate briefing <b>→</b></button>
             </form>
@@ -299,14 +300,14 @@ export default function HomePage() {
             <div className="home-section-heading"><div><h2>Your classroom</h2><p>Manage your class, track progress and stay connected.</p></div></div>
             <div className="home-classroom-grid">
               {classroomItems.map(([title, description]) => (
-                <a className="home-classroom-card home-action-card" href={title === "Time table" ? "/timetable" : "/library"} key={title} onClick={(event) => {
-                  if (title !== "Time table") return;
+                <a className="home-classroom-card home-action-card" href={title === "Time table" ? "/timetable" : title === "Students & marks" ? "/students" : title === "Tests" ? "/tests" : "/library"} key={title} onClick={(event) => {
+                  if (title !== "Time table" && title !== "Students & marks" && title !== "Tests") return;
                   event.preventDefault();
-                  window.history.pushState({}, "", "/timetable");
+                  window.history.pushState({}, "", title === "Time table" ? "/timetable" : title === "Students & marks" ? "/students" : "/tests");
                   window.dispatchEvent(new PopStateEvent("popstate"));
                 }}>
                   <div><span className="home-card-icon"><HomeIcon type={title} /></span><strong>{title}</strong></div>
-                  <small>{description}</small><span className="home-card-action">{title === "Students & marks" ? "View students" : title === "Time table" ? "Open time table" : title === "Analytics" ? "View analytics" : "Send a message"} <b>→</b></span>
+                  <small>{description}</small><span className="home-card-action">{title === "Students & marks" ? "View students" : title === "Time table" ? "Open time table" : title === "Tests" ? "View tests" : "Send a message"} <b>→</b></span>
                 </a>
               ))}
             </div>
@@ -398,4 +399,45 @@ function HomeIcon({ type }) {
     return <svg {...common}><rect x="5.5" y="4.5" width="15" height="18" rx="2" stroke="currentColor" strokeWidth="1.6" /><rect x="9.5" y="3" width="7" height="3.5" rx="1" fill="currentColor" /><path d="M9 12H17M9 16H14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>;
   }
   return <svg {...common}><rect x="5" y="3" width="16" height="20" rx="2" stroke="currentColor" strokeWidth="1.6" /><path d="M9 9H17M9 13H17M9 17H14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>;
+}
+
+function HomeThemedSelect({ value, onChange, options, ariaLabel, disabled = false }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef(null);
+  const selected = options.find((option) => (typeof option === "string" ? option : option.value) === value);
+  const selectedLabel = typeof selected === "string" ? selected : selected?.label;
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const close = (event) => {
+      if (!rootRef.current?.contains(event.target)) setOpen(false);
+    };
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
+
+  return (
+    <div className={`home-themed-select ${open ? "open" : ""}`} ref={rootRef}>
+      <button type="button" className="home-themed-select-trigger" aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={open} disabled={disabled} onClick={() => setOpen((current) => !current)}>
+        <span className={value ? "" : "placeholder"}>{selectedLabel || "Select an option"}</span>
+        <span className="home-themed-select-chevron" aria-hidden="true" />
+      </button>
+      {open ? (
+        <div className="home-themed-select-menu" role="listbox" aria-label={ariaLabel}>
+          {options.map((option) => {
+            const normalized = typeof option === "string" ? { value: option, label: option } : option;
+            const isSelected = normalized.value === value;
+            return <button type="button" role="option" aria-selected={isSelected} className={`home-themed-select-option ${isSelected ? "selected" : ""}`} key={normalized.value || normalized.label} onClick={() => { onChange(normalized.value); setOpen(false); }}>{normalized.label}<span aria-hidden="true">{isSelected ? "✓" : ""}</span></button>;
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
 }

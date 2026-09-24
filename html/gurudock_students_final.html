@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GuruDock — Students</title>
+<style>
+:root{
+  --brown:#633719;--brown2:#4d2812;--cream:#f6f3eb;--card:#fffdfa;
+  --line:#e4ddd3;--text:#27313b;--muted:#74808b;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--cream);color:var(--text);font-family:Inter,Segoe UI,Arial,sans-serif}
+.app{display:flex;min-height:100vh}
+.sidebar{
+  width:210px;flex:0 0 210px;min-height:100vh;background:linear-gradient(180deg,#663a1b,#4e2914);
+  color:#fff;padding:20px 10px;display:flex;flex-direction:column
+}
+.logo{display:flex;align-items:center;gap:10px;padding:0 10px 22px;border-bottom:1px solid rgba(255,255,255,.12)}
+.logo-mark{width:43px;height:43px;background:#fff;color:var(--brown);display:grid;place-items:center;font-size:25px;font-weight:900}
+.logo-name{font:700 23px Georgia,serif}.logo-tag{font-size:10px;margin-top:2px}
+.nav{margin-top:20px}.nav a{
+  height:62px;border-radius:0 8px 8px 0;display:flex;align-items:center;gap:18px;
+  padding:0 28px;color:#fff;text-decoration:none;font-size:14px;margin:2px 0
+}
+.nav a.active,.nav a:hover{background:rgba(255,255,255,.16);font-weight:750}
+.icon{width:23px;text-align:center;font-size:21px}
+.profile{margin-top:auto;border-top:1px solid rgba(255,255,255,.12);padding:18px 25px 3px;display:flex;gap:14px;align-items:center;font-size:14px}
+
+.main{flex:1;min-width:0}
+.header{
+  height:95px;background:#fffefa;border-bottom:1px solid var(--line);
+  display:flex;align-items:center;justify-content:space-between;padding:0 45px 0 55px
+}
+.eyebrow{font-size:10px;letter-spacing:1.5px;font-weight:800;color:#bd572a;margin-bottom:4px}
+.title{font:400 32px Georgia,serif;color:#18212a;margin:0}
+.header-right{display:flex;align-items:center;gap:12px;color:#806f63;font-size:12px}
+.avatar{width:40px;height:40px;border-radius:50%;background:var(--brown);color:#fff;display:grid;place-items:center;font-weight:800}
+
+.content{padding:28px 38px 40px 55px}
+.tabs{display:flex;gap:38px;height:54px;border-bottom:1px solid var(--line);align-items:flex-start}
+.tab{
+  height:54px;padding:7px 0;border:0;background:none;color:#735f50;font-size:15px;font-weight:650;
+  cursor:pointer;position:relative;white-space:nowrap
+}
+.tab.active{color:var(--brown);font-weight:800}
+.tab.active:after{content:"";position:absolute;height:2px;background:var(--brown);bottom:-1px;left:0;right:0}
+
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin:24px 0 20px}
+.stat{
+  min-height:98px;background:var(--card);border:1px solid var(--line);border-radius:11px;
+  display:flex;align-items:center;gap:20px;padding:18px
+}
+.stat-icon{
+  width:58px;height:58px;flex:0 0 58px;border-radius:50%;background:#f1e8dc;
+  box-shadow:0 0 0 7px #faf6ef;display:grid;place-items:center;color:var(--brown);font-size:25px
+}
+.stat-label{font-size:12px;color:#786b61;margin-bottom:6px}.stat-number{font:400 28px Georgia,serif;color:#2d302f}
+
+.filters{
+  background:var(--card);border:1px solid var(--line);border-radius:11px;
+  padding:17px 20px;display:grid;grid-template-columns:1fr 1fr 2.7fr 1fr;gap:20px;margin-bottom:20px
+}
+label{display:block;font-size:11px;font-weight:750;color:#625b55;margin-bottom:7px}
+.control{
+  width:100%;height:42px;border:1px solid #e0d9d0;border-radius:10px;background:#fff;
+  color:#52606b;padding:0 13px;font-size:13px;outline:0
+}
+.search-wrap{position:relative}.search{padding-left:43px}.search-icon{position:absolute;left:14px;top:8px;font-size:20px;color:#66737c}
+
+.table-card{background:var(--card);border:1px solid var(--line);border-radius:11px;overflow:hidden}
+.table-wrap{overflow:auto}
+table{width:100%;border-collapse:collapse;min-width:980px}
+thead th{
+  background:#f4efe7;color:#59636d;font-size:11px;font-weight:800;text-align:left;
+  padding:12px 18px;border-bottom:1px solid #e4ddd4
+}
+tbody td{padding:11px 18px;border-bottom:1px solid #eee9e3;font-size:12px;color:#4c5862}
+tbody tr:hover{background:#fcfaf7}
+tbody tr:last-child td{border-bottom:0}
+.check{width:17px;height:17px;accent-color:var(--brown)}
+.name{font-weight:700;color:#3e4850}
+.status{display:inline-block;padding:5px 12px;border-radius:6px;font-size:10px;font-weight:800}
+.active{background:#d9f7db;color:#23933a}.absent{background:#ffd9d4;color:#b84034}
+.view{
+  min-width:74px;padding:7px 15px;background:#fff;border:1px solid #aa907b;border-radius:7px;
+  color:#674027;font-size:11px;font-weight:750;cursor:pointer
+}
+.view:hover{background:#f6eee6}
+.footer{padding:17px 20px;color:#64727d;font-size:12px}
+
+.add-panel{display:none;background:var(--card);border:1px solid var(--line);border-radius:11px;padding:24px;margin:24px 0 20px}
+.add-panel.show{display:block}
+.add-panel h2{font:400 23px Georgia,serif;margin:0 0 5px;color:#2b302f}
+.add-panel p{font-size:12px;color:var(--muted);margin:0}
+.form-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:22px}
+.form-grid input,.form-grid select{width:100%;height:42px;border:1px solid #e0d9d0;border-radius:9px;padding:0 12px;background:#fff;font-size:13px}
+.form-actions{display:flex;justify-content:flex-end;gap:9px;margin-top:20px;padding-top:17px;border-top:1px solid var(--line)}
+.primary,.secondary{height:40px;padding:0 20px;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer}
+.primary{border:1px solid var(--brown);background:var(--brown);color:#fff}.secondary{border:1px solid #bfae9d;background:#fff;color:#674027}
+
+.toast{position:fixed;right:25px;bottom:25px;background:#4e2b16;color:#fff;padding:12px 17px;border-radius:8px;font-size:12px;display:none}
+
+@media(max-width:1050px){
+  .sidebar{width:180px;flex-basis:180px}.content{padding-left:25px;padding-right:25px}
+  .filters{grid-template-columns:1fr 1fr}.stats{grid-template-columns:1fr 1fr}
+}
+@media(max-width:700px){
+  .sidebar{display:none}.header{height:82px;padding:0 18px}.content{padding:18px 15px}
+  .header-right>span{display:none}.stats{grid-template-columns:1fr 1fr}
+  .filters{grid-template-columns:1fr}.form-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="app">
+<aside class="sidebar">
+  <div class="logo"><div class="logo-mark">◇</div><div><div class="logo-name">GuruDock</div><div class="logo-tag">Teach Smarter. Together.</div></div></div>
+  <nav class="nav">
+    <a class="active" href="#"><span class="icon">⌂</span>Home</a>
+    <a href="#"><span class="icon">⊞</span>Create</a>
+    <a href="#"><span class="icon">▱</span>Briefing</a>
+    <a href="#"><span class="icon">□</span>Library</a>
+    <a href="#"><span class="icon">▣</span>Templates</a>
+  </nav>
+  <div class="profile"><span class="icon">♙</span>Profile</div>
+</aside>
+
+<main class="main">
+<header class="header">
+  <div><div class="eyebrow">TEACHER WORKSPACE</div><h1 class="title">Students</h1></div>
+  <div class="header-right"><span>Wednesday, 23 September, 2026</span><div class="avatar">M</div><strong style="color:#3f352e">Ms</strong></div>
+</header>
+
+<section class="content">
+  <div class="tabs">
+    <button class="tab active" onclick="showAll(this)">All Students</button>
+    <button class="tab" onclick="showAdd(this)">Add Student</button>
+  </div>
+
+  <div id="allView">
+    <div class="stats">
+      <div class="stat"><div class="stat-icon">♟</div><div><div class="stat-label">Total Students</div><div class="stat-number" id="total">148</div></div></div>
+      <div class="stat"><div class="stat-icon">✓</div><div><div class="stat-label">Active Students</div><div class="stat-number" id="activeCount">145</div></div></div>
+      <div class="stat"><div class="stat-icon">×</div><div><div class="stat-label">Absent Today</div><div class="stat-number">3</div></div></div>
+      <div class="stat"><div class="stat-icon">♟</div><div><div class="stat-label">Classes Handled</div><div class="stat-number">6</div></div></div>
+    </div>
+
+    <div class="filters">
+      <div><label>Class</label><select class="control" id="classFilter" onchange="render()"><option value="">All Classes</option><option>9</option><option>10</option><option>11</option><option>12</option></select></div>
+      <div><label>Section</label><select class="control" id="sectionFilter" onchange="render()"><option value="">All Sections</option><option>A</option><option>B</option><option>C</option><option>D</option><option>E</option></select></div>
+      <div><label>Search</label><div class="search-wrap"><span class="search-icon">⌕</span><input class="control search" id="search" oninput="render()" placeholder="Search by name or roll number..."></div></div>
+      <div><label>Sort by</label><select class="control" id="sort" onchange="render()"><option value="name">Name (A–Z)</option><option value="roll">Roll Number</option><option value="class">Class</option></select></div>
+    </div>
+
+    <div class="table-card">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th><input class="check" id="selectAll" type="checkbox" onclick="toggleAll(this)"></th><th>#</th><th>Student Name</th><th>Class</th><th>Section</th><th>Roll No.</th><th>Gender</th><th>Contact</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <div class="footer" id="footer">Showing 8 of 148 students</div>
+    </div>
+  </div>
+
+  <div class="add-panel" id="addPanel">
+    <h2>Add a new student</h2><p>Enter the student's details and add them to your class list.</p>
+    <div class="form-grid">
+      <div><label>STUDENT NAME *</label><input id="name" placeholder="e.g. Aarav Sharma"></div>
+      <div><label>CLASS *</label><select id="cls"><option value="">Select class</option><option>9</option><option>10</option><option>11</option><option>12</option></select></div>
+      <div><label>SECTION *</label><select id="sec"><option value="">Select section</option><option>A</option><option>B</option><option>C</option><option>D</option><option>E</option></select></div>
+      <div><label>ROLL NUMBER *</label><input id="roll" placeholder="e.g. 12"></div>
+      <div><label>GENDER</label><select id="gender"><option>Female</option><option>Male</option><option>Other</option></select></div>
+      <div><label>CONTACT NUMBER</label><input id="contact" placeholder="Parent / guardian mobile"></div>
+    </div>
+    <div class="form-actions"><button class="secondary" onclick="showAll(document.querySelector('.tab'))">Cancel</button><button class="primary" onclick="addStudent()">Add Student</button></div>
+  </div>
+</section>
+</main>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+let students=[
+['Aarav Sharma','9','E','01','Male','98765 43210','Active'],
+['Aditi Verma','10','D','03','Female','98765 43211','Active'],
+['Arjun Mehta','11','B','05','Male','98765 43212','Active'],
+['Diya Patel','12','C','07','Female','98765 43213','Absent'],
+['Ishaan Gupta','9','E','02','Male','98765 43214','Active'],
+['Meera Iyer','11','C','06','Female','98765 43215','Active'],
+['Kabir Singh','10','D','04','Male','98765 43216','Active'],
+['Nandini Rao','12','C','08','Female','98765 43217','Active']
+];
+
+function render(){
+ let c=document.getElementById('classFilter').value,s=document.getElementById('sectionFilter').value,q=document.getElementById('search').value.toLowerCase(),sort=document.getElementById('sort').value;
+ let data=students.filter(x=>(!c||x[1]===c)&&(!s||x[2]===s)&&(x[0].toLowerCase().includes(q)||x[3].includes(q)));
+ data.sort((a,b)=>sort==='roll'?a[3].localeCompare(b[3],undefined,{numeric:true}):sort==='class'?(a[1]+a[2]).localeCompare(b[1]+b[2]):a[0].localeCompare(b[0]));
+ document.getElementById('rows').innerHTML=data.map((x,i)=>`<tr>
+ <td><input class="check row" type="checkbox"></td><td>${i+1}</td><td class="name">${x[0]}</td><td>${x[1]}</td><td>${x[2]}</td><td>${x[3]}</td><td>${x[4]}</td><td>${x[5]}</td>
+ <td><span class="status ${x[6]==='Active'?'active':'absent'}">${x[6]}</span></td><td><button class="view" onclick="toast('Opening ${x[0]}')">View</button></td></tr>`).join('');
+ document.getElementById('footer').textContent=`Showing ${data.length} of ${students.length} students`;
+}
+function toggleAll(e){document.querySelectorAll('.row').forEach(x=>x.checked=e.checked)}
+function showAll(el){document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));el.classList.add('active');document.getElementById('allView').style.display='block';document.getElementById('addPanel').classList.remove('show');render()}
+function showAdd(el){document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));el.classList.add('active');document.getElementById('allView').style.display='none';document.getElementById('addPanel').classList.add('show')}
+function addStudent(){
+ let n=document.getElementById('name').value.trim(),c=document.getElementById('cls').value,s=document.getElementById('sec').value,r=document.getElementById('roll').value.trim(),g=document.getElementById('gender').value,co=document.getElementById('contact').value.trim()||'—';
+ if(!n||!c||!s||!r){toast('Please fill all required fields');return}
+ students.push([n,c,s,r,g,co,'Active']);
+ document.getElementById('name').value='';document.getElementById('cls').value='';document.getElementById('sec').value='';document.getElementById('roll').value='';document.getElementById('contact').value='';
+ document.getElementById('total').textContent=148+students.length-8;document.getElementById('activeCount').textContent=145+students.length-8;
+ showAll(document.querySelector('.tab'));toast(n+' added successfully');
+}
+function toast(m){let t=document.getElementById('toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',1800)}
+render();
+</script>
+</body>
+</html>

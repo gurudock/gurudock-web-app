@@ -1,10 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import logoUrl from "./assets/gurudock-logo.png";
-import { authenticatedFetch } from "./apiClient";
+import { API_BASE_URL, authenticatedFetch } from "./apiClient";
 import { handleWorkspaceWheel } from "./LibraryPage";
 import LibrarySidebar from "./LibrarySidebar";
-
-const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? "/api" : "https://testing.api.gurudock.com");
+import { readAvailableContentCache, writeAvailableContentCache } from "./availableContentCache";
 
 export default function BriefingPage() {
   const [userName, setUserName] = useState(() => localStorage.getItem("user_name") || "Teacher");
@@ -14,6 +13,7 @@ export default function BriefingPage() {
     } catch {
       return null;
     }
+
   });
   const currentClass = briefingContext?.className || "9-B";
   const currentSubject = briefingContext?.subject || "Mathematics";
@@ -41,12 +41,6 @@ export default function BriefingPage() {
     }
   });
   const initials = userName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
-  const formattedDate = new Intl.DateTimeFormat("en-IN", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  }).format(new Date());
-
   useEffect(() => {
     const syncUser = () => setUserName(localStorage.getItem("user_name") || "Teacher");
     window.addEventListener("auth-changed", syncUser);
@@ -55,17 +49,24 @@ export default function BriefingPage() {
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch(`${API_URL}/content/available-content`, { signal: controller.signal })
+    const applyCurriculum = (data) => {
+      const nextBoard = Object.keys(data).includes(board) ? board : Object.keys(data)[0] || "CBSE";
+      const grades = Object.keys(data[nextBoard] || {}).sort((a, b) => Number(a) - Number(b));
+      const nextClass = grades.includes(initialClass.replace("Class ", "")) ? initialClass : `Class ${grades[0] || ""}`;
+      const subjects = data[nextBoard]?.[nextClass.replace("Class ", "")] || [];
+      setCurriculum(data);
+      setBoard(nextBoard);
+      setForm((current) => ({ ...current, className: nextClass, subject: subjects.includes(current.subject) ? current.subject : subjects[0] || "", chapter: "" }));
+      setCurriculumLoading(false);
+    };
+    const cachedCurriculum = readAvailableContentCache();
+    if (cachedCurriculum) applyCurriculum(cachedCurriculum);
+    fetch(`${API_BASE_URL}/content/available-content`, { signal: controller.signal })
       .then(async (response) => {
         const data = await response.json().catch(() => ({}));
         if (!response.ok || !data || typeof data !== "object" || Array.isArray(data)) throw new Error("Unable to load curriculum.");
-        const nextBoard = Object.keys(data).includes(board) ? board : Object.keys(data)[0] || "CBSE";
-        const grades = Object.keys(data[nextBoard] || {}).sort((a, b) => Number(a) - Number(b));
-        const nextClass = grades.includes(initialClass.replace("Class ", "")) ? initialClass : `Class ${grades[0] || ""}`;
-        const subjects = data[nextBoard]?.[nextClass.replace("Class ", "")] || [];
-        setCurriculum(data);
-        setBoard(nextBoard);
-        setForm((current) => ({ ...current, className: nextClass, subject: subjects.includes(current.subject) ? current.subject : subjects[0] || "", chapter: "" }));
+        writeAvailableContentCache(data);
+        applyCurriculum(data);
       })
       .catch(() => {})
       .finally(() => setCurriculumLoading(false));
@@ -80,7 +81,7 @@ export default function BriefingPage() {
     if (!board || !grade || !form.subject) return undefined;
     const controller = new AbortController();
     setChaptersLoading(true);
-    fetch(`${API_URL}/content/chapters-topics`, {
+    fetch(`${API_BASE_URL}/content/chapters-topics`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ board, grade, subject: form.subject, book_name: "" }),
@@ -101,7 +102,7 @@ export default function BriefingPage() {
     setBriefingLoading(true);
     setBriefingError("");
     try {
-      const response = await authenticatedFetch(`${API_URL}/briefing/pull/stand_alone`, {
+      const response = await authenticatedFetch(`${API_BASE_URL}/briefing/pull/stand_alone`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: {
@@ -143,7 +144,6 @@ export default function BriefingPage() {
             <strong>GuruDock</strong>
           </a>
           <div className="home-topbar-user">
-            <span className="home-topbar-date">{formattedDate}, 2026</span>
             <span className="home-avatar">{initials || "T"}</span>
             <strong>{userName}</strong>
           </div>
@@ -155,13 +155,12 @@ export default function BriefingPage() {
               <p>Choose a class, subject and chapter to prepare focused teaching notes.</p>
             </div>
             <form className="briefing-form" onSubmit={generateBriefing}>
-              <label>Class<select value={form.className} onChange={(event) => {
-                const nextClass = event.target.value;
+              <label>Class<BriefingThemedSelect value={form.className} onChange={(nextClass) => {
                 const subjects = curriculum[board]?.[nextClass.replace("Class ", "")] || [];
                 setForm({ className: nextClass, subject: subjects[0] || "", chapter: "" });
-              }} disabled={curriculumLoading} required>{classOptions.map((option) => <option key={option}>{option}</option>)}</select></label>
-              <label>Subject<select value={form.subject} onChange={(event) => setForm({ ...form, subject: event.target.value, chapter: "" })} disabled={curriculumLoading} required>{subjectOptions.map((option) => <option key={option}>{option}</option>)}</select></label>
-              <label>Chapter<select value={form.chapter} onChange={(event) => setForm({ ...form, chapter: event.target.value })} disabled={chaptersLoading || !chapters.length} required><option value="">{chaptersLoading ? "Loading chapters..." : "Select chapter"}</option>{chapters.map((option) => <option key={option}>{option}</option>)}</select></label>
+              }} options={classOptions} ariaLabel="Select class" disabled={curriculumLoading} /></label>
+              <label>Subject<BriefingThemedSelect value={form.subject} onChange={(subject) => setForm({ ...form, subject, chapter: "" })} options={subjectOptions} ariaLabel="Select subject" disabled={curriculumLoading} /></label>
+              <label>Chapter<BriefingThemedSelect value={form.chapter} onChange={(chapter) => setForm({ ...form, chapter })} options={[{ value: "", label: chaptersLoading ? "Loading chapters..." : "Select chapter" }, ...chapters]} ariaLabel="Select chapter" disabled={chaptersLoading || !chapters.length} /></label>
               <button className="briefing-primary-button" type="submit" disabled={briefingLoading}>{briefingLoading ? "Generating..." : "Generate briefing →"}</button>
             </form>
           </section>
@@ -194,6 +193,41 @@ export default function BriefingPage() {
       {briefing && previewOpen && <BriefingPreview briefing={briefing} onClose={() => setPreviewOpen(false)} />}
     </div>
   );
+}
+
+function BriefingThemedSelect({ value, onChange, options, ariaLabel, disabled = false }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef(null);
+  const selected = options.find((option) => (typeof option === "string" ? option : option.value) === value);
+  const selectedLabel = typeof selected === "string" ? selected : selected?.label;
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const close = (event) => {
+      if (!rootRef.current?.contains(event.target)) setOpen(false);
+    };
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
+
+  return <div className={`briefing-themed-select ${open ? "open" : ""}`} ref={rootRef}>
+    <button type="button" className="briefing-themed-select-trigger" aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={open} disabled={disabled} onClick={() => setOpen((current) => !current)}>
+      <span className={value ? "" : "placeholder"}>{selectedLabel || "Select an option"}</span>
+      <span className="briefing-themed-select-chevron" aria-hidden="true" />
+    </button>
+    {open && <div className="briefing-themed-select-menu" role="listbox" aria-label={ariaLabel}>{options.map((option) => {
+      const normalized = typeof option === "string" ? { value: option, label: option } : option;
+      const isSelected = normalized.value === value;
+      return <button type="button" role="option" aria-selected={isSelected} className={`briefing-themed-select-option ${isSelected ? "selected" : ""}`} key={normalized.value || normalized.label} onClick={() => { onChange(normalized.value); setOpen(false); }}>{normalized.label}<span aria-hidden="true">{isSelected ? "✓" : ""}</span></button>;
+    })}</div>}
+  </div>;
 }
 
 export function BriefingPreview({ briefing, onClose }) {

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import logoUrl from "./assets/gurudock-logo.png";
 import LibrarySidebar from "./LibrarySidebar";
+import { readAvailableContentCache, writeAvailableContentCache } from "./availableContentCache";
 import { authenticatedFetch, API_BASE_URL } from "./apiClient";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -98,8 +99,6 @@ export default function TimetablePage() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [clearRequested, setClearRequested] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState("");
-  const date = new Date();
-
   useEffect(() => {
     const syncUser = () => setUserName(localStorage.getItem("user_name") || "Teacher");
     window.addEventListener("auth-changed", syncUser);
@@ -108,6 +107,22 @@ export default function TimetablePage() {
 
   useEffect(() => {
     const controller = new AbortController();
+    const cachedCurriculum = readAvailableContentCache();
+    if (cachedCurriculum) {
+      const board = Object.prototype.hasOwnProperty.call(cachedCurriculum, "CBSE")
+        ? "CBSE"
+        : Object.keys(cachedCurriculum)[0] || "CBSE";
+      const grades = Object.keys(cachedCurriculum[board] || {}).sort((a, b) => Number(a) - Number(b));
+      const nextClass = grades.includes(className.replace(/^Class\s+/i, ""))
+        ? className
+        : grades[0] ? `Class ${grades[0]}` : "";
+      const subjects = cachedCurriculum[board]?.[nextClass.replace(/^Class\s+/i, "")] || [];
+      setCurriculum(cachedCurriculum);
+      setCurriculumBoard(board);
+      setClassName(nextClass);
+      setSubject(subjects[0] || "");
+      setCurriculumLoading(false);
+    }
 
     const loadCurriculum = async () => {
       try {
@@ -129,6 +144,7 @@ export default function TimetablePage() {
         const subjects = data[board]?.[nextClass.replace(/^Class\s+/i, "")] || [];
 
         setCurriculum(data);
+        writeAvailableContentCache(data);
         setCurriculumBoard(board);
         setClassName(nextClass);
         setSubject(subjects[0] || "");
@@ -251,11 +267,6 @@ export default function TimetablePage() {
   };
 
   const initials = userName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
-  const formattedDate = new Intl.DateTimeFormat("en-IN", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  }).format(date);
   const currentClassLabel = `${className} — ${section}`;
   const classOptions = Object.keys(curriculum[curriculumBoard] || {})
     .sort((a, b) => Number(a) - Number(b))
@@ -677,6 +688,7 @@ export default function TimetablePage() {
           border-radius: 8px;
           padding: 8px;
           overflow-wrap: anywhere;
+          text-align: center;
         }
 
         .gurudock-timetable-page .lesson b {
@@ -1445,7 +1457,7 @@ export default function TimetablePage() {
         }
       `}</style>
       <div className="library-app gurudock-timetable-page">
-        <LibrarySidebar activeItem="home" />
+        <LibrarySidebar activeItem="timetable" />
     <div className="library-main">
       <header className="home-topbar">
         <div>
@@ -1461,7 +1473,6 @@ export default function TimetablePage() {
           <strong>GuruDock</strong>
         </a>
         <div className="home-topbar-user">
-          <span className="home-topbar-date">{formattedDate}, 2026</span>
           <span className="home-avatar">{initials || "T"}</span>
           <strong>{userName}</strong>
         </div>

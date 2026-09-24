@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { handleWorkspaceWheel } from "./LibraryPage";
 import LibrarySidebar from "./LibrarySidebar";
+import logoUrl from "./assets/gurudock-logo.png";
 
 const templates = [
   { name: "Greenwood Standard", description: "Mid-term & final layout · used 14 times", lastUsed: "Last used 3 days ago", featured: true },
@@ -9,14 +10,32 @@ const templates = [
 
 export default function TemplatesPage() {
   const [saved, setSaved] = useState(false);
+  const [userName, setUserName] = useState(() => localStorage.getItem("user_name") || "Teacher");
+  const initials = userName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
+
+  useEffect(() => {
+    const syncUser = () => setUserName(localStorage.getItem("user_name") || "Teacher");
+    window.addEventListener("auth-changed", syncUser);
+    return () => window.removeEventListener("auth-changed", syncUser);
+  }, []);
 
   return (
     <div className="template-app" onWheel={(event) => handleWorkspaceWheel(event, ".template-content")}>
       <LibrarySidebar activeItem="templates" />
       <div className="template-main">
-        <header className="template-header">
-          <strong>Templates</strong>
-          <button className="template-upload-button" type="button">+ Upload new template</button>
+        <header className="home-topbar template-home-topbar">
+          <div>
+            <span className="home-topbar-eyebrow">Teacher workspace</span>
+            <h1>Templates</h1>
+          </div>
+          <a className="home-mobile-brand" href="/home" aria-label="GuruDock home">
+            <img src={logoUrl} alt="" />
+            <strong>GuruDock</strong>
+          </a>
+          <div className="home-topbar-user">
+            <span className="home-avatar">{initials || "T"}</span>
+            <strong>{userName}</strong>
+          </div>
         </header>
         <main className="template-content">
           <p className="template-intro">Upload an old paper and reuse its layout — school name, header, footer, exam type, marks scheme. New generations inherit the template automatically.</p>

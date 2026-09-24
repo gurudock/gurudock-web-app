@@ -8,6 +8,8 @@ import ProfilePage from "./ProfilePage";
 import CreatePage from "./CreatePage";
 import HomePage from "./HomePage";
 import TimetablePage from "./TimetablePage";
+import StudentsPage from "./StudentsPage";
+import TestsPage from "./TestsPage";
 import AuthModal from "./AuthModal";
 import AuthRequiredPage from "./AuthRequiredPage";
 import { validateStoredSession } from "./apiClient";
@@ -102,6 +104,19 @@ const testimonials = [
   ],
 ];
 
+const appRoutes = new Set([
+  "/",
+  "/home",
+  "/library",
+  "/timetable",
+  "/students",
+  "/tests",
+  "/templates",
+  "/briefing",
+  "/profile",
+  "/create",
+]);
+
 function App() {
   const [pathname, setPathname] = useState(window.location.pathname);
   const [createMode, setCreateMode] = useState(null);
@@ -160,6 +175,9 @@ function App() {
     );
     const handleCreateNavigation = (event) => {
       setCreateMode(event.detail?.mode || "question");
+      if (window.location.pathname !== "/create") {
+        window.history.pushState({}, "", "/create");
+      }
       setPathname("/create");
     };
     window.addEventListener("popstate", handlePopState);
@@ -188,6 +206,17 @@ function App() {
     }
   }, [pathname]);
 
+  useEffect(() => {
+    if (localStorage.getItem("access_token") && !appRoutes.has(pathname)) {
+      window.history.replaceState({}, "", "/home");
+      setPathname("/home");
+    }
+  }, [pathname]);
+
+  if (localStorage.getItem("access_token") && !appRoutes.has(pathname)) {
+    return <HomePage />;
+  }
+
   if (pathname !== "/" && !localStorage.getItem("access_token")) {
     return <AuthRequiredPage destination={`${window.location.pathname}${window.location.search}${window.location.hash}`} />;
   }
@@ -201,6 +230,12 @@ function App() {
   }
   if (pathname === "/timetable") {
     return <TimetablePage />;
+  }
+  if (pathname === "/students") {
+    return <StudentsPage />;
+  }
+  if (pathname === "/tests") {
+    return <TestsPage />;
   }
   if (pathname === "/templates") {
     return <TemplatesPage />;

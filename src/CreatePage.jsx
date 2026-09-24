@@ -2,7 +2,10 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { handleWorkspaceWheel } from "./LibraryPage";
 import { DocumentPreview } from "./LibraryPage";
 import LibrarySidebar from "./LibrarySidebar";
-import { authenticatedFetch } from "./apiClient";
+import { API_BASE_URL, authenticatedFetch } from "./apiClient";
+import logoUrl from "./assets/gurudock-logo.png";
+import { cacheGeneratedLibraryDocument } from "./libraryCache";
+import { readAvailableContentCache, writeAvailableContentCache } from "./availableContentCache";
 
 const chapters = [
   { name: "Chemical Reactions and Equations", topics: ["Types of Chemical Reactions", "Balancing Chemical Equations", "Combination and Decomposition Reactions", "Displacement Reactions", "Double Displacement Reactions"], selected: [0, 1, 3] },
@@ -34,7 +37,6 @@ const modeTabs = {
   lesson: { label: "Lesson Plan", description: "Plan your class", icon: "✦" },
 };
 
-const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? "/api" : "https://testing.api.gurudock.com");
 const CURRICULUM_CACHE_KEY = "gurudock_curriculum_cache";
 const CHAPTERS_CACHE_KEY = "gurudock_chapters_topics_cache";
 const CONTENT_CACHE_TTL = 24 * 60 * 60 * 1000;
@@ -90,25 +92,34 @@ export default function CreatePage({ initialMode = null }) {
   const [curriculum, setCurriculum] = useState({});
   const [curriculumLoading, setCurriculumLoading] = useState(true);
   const [curriculumError, setCurriculumError] = useState("");
+  const [userName, setUserName] = useState(() => localStorage.getItem("user_name") || "Teacher");
   const [chaptersError, setChaptersError] = useState("");
   const details = modeDetails[mode];
   const duration = durationValue ? `${durationValue} ${durationUnit}` : "";
+  const initials = userName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
+
+  useEffect(() => {
+    const syncUser = () => setUserName(localStorage.getItem("user_name") || "Teacher");
+    window.addEventListener("auth-changed", syncUser);
+    return () => window.removeEventListener("auth-changed", syncUser);
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
-    const cachedCurriculum = readContentCache(CURRICULUM_CACHE_KEY);
+    const cachedCurriculum = readAvailableContentCache() || readContentCache(CURRICULUM_CACHE_KEY);
     if (cachedCurriculum && typeof cachedCurriculum === "object" && !Array.isArray(cachedCurriculum)) {
       setCurriculum(cachedCurriculum);
       setCurriculumLoading(false);
     }
     const loadCurriculum = async () => {
       try {
-        const response = await fetch(`${API_URL}/content/available-content`, { signal: controller.signal });
+        const response = await fetch(`${API_BASE_URL}/content/available-content`, { signal: controller.signal });
         const data = await response.json().catch(() => ({}));
         if (!response.ok || !data || typeof data !== "object" || Array.isArray(data)) {
           throw new Error("Unable to load available curriculum.");
         }
         writeContentCache(CURRICULUM_CACHE_KEY, data);
+        writeAvailableContentCache(data);
         setCurriculum(data);
       } catch (error) {
         if (error.name !== "AbortError") setCurriculumError(error.message || "Unable to load available curriculum.");
@@ -176,7 +187,7 @@ export default function CreatePage({ initialMode = null }) {
         setLessonChapter("");
       }
       try {
-        const response = await fetch(`${API_URL}/content/chapters-topics`, {
+        const response = await fetch(`${API_BASE_URL}/content/chapters-topics`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -306,7 +317,7 @@ export default function CreatePage({ initialMode = null }) {
       try {
         const lessonPlanEndpoint = import.meta.env.DEV
           ? "/api/lesson-plan/generate"
-          : `${API_URL}/api/lesson-plan/generate`;
+          : `${API_BASE_URL}/api/lesson-plan/generate`;
         const response = await authenticatedFetch(lessonPlanEndpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -326,7 +337,7 @@ export default function CreatePage({ initialMode = null }) {
         }
         const contentId = lessonPlan.content_id || lessonPlan.contentId || lessonPlan.id;
         if (!contentId) throw new Error("Lesson plan was generated but no content ID was returned.");
-        setGeneratedPaper({
+        const generatedDocument = {
           ...lessonPlan,
           id: contentId,
           content_id: contentId,
@@ -339,7 +350,9 @@ export default function CreatePage({ initialMode = null }) {
           board: lessonPlan.board || board,
           language: lessonPlan.language || "english",
           num_periods: lessonPlan.num_periods ?? lessonPeriods,
-        });
+        };
+        cacheGeneratedLibraryDocument(generatedDocument);
+        setGeneratedPaper(generatedDocument);
         setGenerated(true);
         setPreviewOpen(true);
       } catch (error) {
@@ -368,7 +381,7 @@ export default function CreatePage({ initialMode = null }) {
 
       setGenerationLoading(true);
       try {
-        const response = await authenticatedFetch(`${API_URL}/worksheet/generate`, {
+        const response = await authenticatedFetch(`${API_BASE_URL}/worksheet/generate`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -395,7 +408,7 @@ export default function CreatePage({ initialMode = null }) {
         }
         const contentId = worksheet.content_id || worksheet.contentId || worksheet.id;
         if (!contentId) throw new Error("Worksheet was generated but no content ID was returned.");
-        setGeneratedPaper({
+        const generatedDocument = {
           ...worksheet,
           id: contentId,
           content_id: contentId,
@@ -408,7 +421,9 @@ export default function CreatePage({ initialMode = null }) {
           board: worksheet.board || board,
           difficulty: worksheet.difficulty || difficulty.toLowerCase(),
           total_marks: worksheet.total_marks ?? worksheetMarks,
-        });
+        };
+        cacheGeneratedLibraryDocument(generatedDocument);
+        setGeneratedPaper(generatedDocument);
         setGenerated(true);
         setPreviewOpen(true);
       } catch (error) {
@@ -437,7 +452,7 @@ export default function CreatePage({ initialMode = null }) {
 
       setGenerationLoading(true);
       try {
-        const response = await authenticatedFetch(`${API_URL}/assignment/generate`, {
+        const response = await authenticatedFetch(`${API_BASE_URL}/assignment/generate`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -473,7 +488,7 @@ export default function CreatePage({ initialMode = null }) {
           || assignment.contentId
           || assignment.id;
         if (!contentId) throw new Error("Assignment was generated but no content ID was returned.");
-        setGeneratedPaper({
+        const generatedDocument = {
           ...responseData,
           ...assignment,
           id: contentId,
@@ -486,7 +501,9 @@ export default function CreatePage({ initialMode = null }) {
           max_marks: assignment.max_marks ?? assignmentMarks,
           duration: assignment.duration || duration,
           difficulty: assignment.difficulty || difficulty.toLowerCase(),
-        });
+        };
+        cacheGeneratedLibraryDocument(generatedDocument);
+        setGeneratedPaper(generatedDocument);
         setGenerated(true);
         setPreviewOpen(true);
       } catch (error) {
@@ -514,7 +531,7 @@ export default function CreatePage({ initialMode = null }) {
     }
     setGenerationLoading(true);
     try {
-      const response = await authenticatedFetch(`${API_URL}/question-paper/generate`, {
+      const response = await authenticatedFetch(`${API_BASE_URL}/question-paper/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -548,7 +565,7 @@ export default function CreatePage({ initialMode = null }) {
       const paper = data.data && typeof data.data === "object" ? data.data : data;
       const contentId = data.content_id || data.contentId || data.id || paper.content_id || paper.contentId || paper.id;
       if (!contentId) throw new Error("Question paper was generated but no content ID was returned.");
-      setGeneratedPaper({
+      const generatedDocument = {
         ...data,
         ...paper,
         id: contentId,
@@ -562,7 +579,9 @@ export default function CreatePage({ initialMode = null }) {
         max_marks: paper.max_marks ?? questionPaperMaxMarks,
         duration: paper.duration || duration,
         difficulty: paper.difficulty || difficulty.toLowerCase(),
-      });
+      };
+      cacheGeneratedLibraryDocument(generatedDocument);
+      setGeneratedPaper(generatedDocument);
       setGenerated(true);
       setPreviewOpen(true);
     } catch (error) {
@@ -631,14 +650,25 @@ export default function CreatePage({ initialMode = null }) {
     <div className="create-app generator-create" onWheel={(event) => handleWorkspaceWheel(event, ".generator-create-content")}>
       <LibrarySidebar activeItem="create" />
       <main className="generator-create-main">
-        <section className="generator-create-content">
-          <div className="generator-hero">
-            <div><h1>{details[0]}</h1><p>{details[1]}</p>{chaptersError && <small className="generator-error">{chaptersError}</small>}</div>
-            <div className="generator-tip"><span>💡</span><div><strong>{step === 1 ? "Start with the basics." : step === 2 ? "Focused topics create better learning." : step === 3 ? "Build your paper your way." : "Almost there!"}</strong><small>{step === 1 ? mode === "lesson" ? "Set your class, subject, board, chapter and periods." : "Set your class, subject and board details." : step === 2 ? "Select only the topics you want to include." : step === 3 ? "Create sections with the right questions and marks." : "Review your choices and generate a ready-to-use plan."}</small></div></div>
+        <header className="home-topbar create-home-topbar">
+          <div>
+            <span className="home-topbar-eyebrow">Teacher workspace</span>
+            <h1>Create</h1>
           </div>
+          <a className="home-mobile-brand" href="/home" aria-label="GuruDock home">
+            <img src={logoUrl} alt="" />
+            <strong>GuruDock</strong>
+          </a>
+          <div className="home-topbar-user">
+            <span className="home-avatar">{initials || "T"}</span>
+            <strong>{userName}</strong>
+          </div>
+        </header>
+        <section className="generator-create-content">
           <div className="generator-mode-tabs">
             {Object.entries(modeTabs).map(([key, tab]) => <button key={key} className={mode === key ? "active" : ""} onClick={() => changeMode(key)} type="button"><span className={`generator-mode-icon generator-mode-icon-${key}`} aria-hidden="true">{tab.icon}</span><span className="generator-mode-copy"><strong>{tab.label}</strong><small>{tab.description}</small></span></button>)}
           </div>
+          {chaptersError && <small className="generator-error">{chaptersError}</small>}
           {mode !== "lesson" && <div className="generator-progress">
             {(mode === "question" ? ["Basic details", "Select chapters & topics", "Set paper structure", "Review & generate"] : ["Basic details", "Select Chapter", "Set paper structure", "Review & generate"]).map((label, index) => <React.Fragment key={label}><div className={`generator-step ${step === index + 1 ? "active" : ""} ${step > index + 1 ? "done" : ""}`}><b>{step > index + 1 ? "✓" : index + 1}</b><span><strong>{label}</strong><small>{["Choose class and subject", "Choose what to include", "Configure document", "Check and create"][index]}</small></span></div>{index < 3 && <i className={step > index + 1 ? "done" : ""} />}</React.Fragment>)}
           </div>}

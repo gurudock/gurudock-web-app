@@ -2,14 +2,12 @@ import React, { useEffect, useRef, useState } from "react";
 import emptyLibraryUrl from "./assets/empty-library.png";
 import libraryLoadingUrl from "./assets/library-loading.png";
 import logoUrl from "./assets/gurudock-logo.png";
-import { authenticatedFetch } from "./apiClient";
+import { API_BASE_URL, authenticatedFetch } from "./apiClient";
 import AuthModal from "./AuthModal";
 import LibrarySidebar from "./LibrarySidebar";
+import { readCachedLibraryDocument, readLibraryCache, updateCachedLibraryDocument, writeLibraryCache } from "./libraryCache";
 
-const LIBRARY_API_URL = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
 const LIBRARY_API_ORIGIN = "https://testing.api.gurudock.com";
-const LIBRARY_CACHE_KEY = "gurudock_library_cache";
-const LIBRARY_CACHE_TTL = 24 * 60 * 60 * 1000;
 const LIBRARY_TYPE_FILTERS = [
   ["all", "All"],
   ["question_paper", "Question papers"],
@@ -17,47 +15,6 @@ const LIBRARY_TYPE_FILTERS = [
   ["worksheet", "Worksheets"],
   ["lesson_plan", "Lesson plans"],
 ];
-
-function getLibraryCacheKey() {
-  const user = localStorage.getItem("user_email") || localStorage.getItem("user_name") || "authenticated";
-  return `${LIBRARY_CACHE_KEY}:${user.toLowerCase()}`;
-}
-
-function readLibraryCache(query) {
-  try {
-    const cached = JSON.parse(localStorage.getItem(getLibraryCacheKey()) || "{}");
-    const entry = cached[query];
-    if (!entry || Date.now() - entry.cachedAt > LIBRARY_CACHE_TTL || !Array.isArray(entry.documents)) return [];
-    return entry.documents;
-  } catch {
-    return [];
-  }
-}
-
-function writeLibraryCache(query, documents) {
-  try {
-    const key = getLibraryCacheKey();
-    const cached = JSON.parse(localStorage.getItem(key) || "{}");
-    cached[query] = { cachedAt: Date.now(), documents };
-    localStorage.setItem(key, JSON.stringify(cached));
-  } catch {
-    // Caching is best effort; the API remains the source of truth.
-  }
-}
-
-function updateCachedLibraryDocument(document) {
-  try {
-    const key = getLibraryCacheKey();
-    const cached = JSON.parse(localStorage.getItem(key) || "{}");
-    Object.values(cached).forEach((entry) => {
-      if (!Array.isArray(entry.documents)) return;
-      entry.documents = entry.documents.map((item) => item.id === document.id ? { ...item, ...document } : item);
-    });
-    localStorage.setItem(key, JSON.stringify(cached));
-  } catch {
-    // Caching is best effort; the API remains the source of truth.
-  }
-}
 
 export default function LibraryPage() {
   const [userName, setUserName] = useState(() => localStorage.getItem("user_name") || "Teacher");
@@ -116,7 +73,7 @@ export default function LibraryPage() {
       try {
         const params = new URLSearchParams({ page: "1", limit: "100" });
         if (normalizedQuery) params.set("search", normalizedQuery);
-        const response = await authenticatedFetch(`${LIBRARY_API_URL}/api/library?${params}`, {
+        const response = await authenticatedFetch(`${API_BASE_URL}/api/library?${params}`, {
           headers: { Authorization: `Bearer ${token}` },
           signal: controller.signal,
         });
@@ -133,11 +90,17 @@ export default function LibraryPage() {
         );
       } catch (requestError) {
         if (requestError.name !== "AbortError") {
-          setDocuments([]);
-          setSelectedDocument(null);
-          setError(requestError.message === "Failed to fetch documents"
-            ? "Unable to connect to the library service. Try again later."
-            : requestError.message || "Unable to load your library.");
+          if (cachedDocuments.length) {
+            setError(requestError.message === "Failed to fetch documents"
+              ? "Unable to refresh your library. Showing cached documents."
+              : `${requestError.message || "Unable to refresh your library."} Showing cached documents.`);
+          } else {
+            setDocuments([]);
+            setSelectedDocument(null);
+            setError(requestError.message === "Failed to fetch documents"
+              ? "Unable to connect to the library service. Try again later."
+              : requestError.message || "Unable to load your library.");
+          }
         }
       } finally {
         if (!controller.signal.aborted) setLoading(false);
@@ -153,30 +116,43 @@ export default function LibraryPage() {
     : documents.filter((document) => document.content_type === typeFilter);
   const groupedDocuments = groupDocuments(filteredDocuments);
   const initials = userName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
-  const formattedDate = new Intl.DateTimeFormat("en-IN", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  }).format(date);
-
   const openDocument = async (document) => {
-    setSelectedDocument(document);
+    const cachedDocument = readCachedLibraryDocument(document.id);
+    const sourceDocument = { ...document, ...cachedDocument };
+    setSelectedDocument(sourceDocument);
     setDocumentDetails(null);
     setDetailsError("");
     setDetailsLoading(true);
     setPreviewOpen(true);
+    const hasCachedContent = sourceDocument.body !== undefined
+      || sourceDocument.data !== undefined
+      || Array.isArray(sourceDocument.questions)
+      || Array.isArray(sourceDocument.periods)
+      || Array.isArray(sourceDocument.sections)
+      || Array.isArray(sourceDocument.content);
+    const cachedDetails = hasCachedContent
+      ? {
+        ...sourceDocument,
+        body: sourceDocument.body ?? sourceDocument.data?.body ?? sourceDocument.data ?? sourceDocument.content,
+        content_type: sourceDocument.content_type,
+      }
+      : null;
+    if (cachedDetails) {
+      setDocumentDetails(cachedDetails);
+      setDetailsLoading(false);
+    }
     try {
-      const contentType = encodeURIComponent(document.content_type);
-      const contentId = encodeURIComponent(document.id);
+      const contentType = encodeURIComponent(sourceDocument.content_type);
+      const contentId = encodeURIComponent(sourceDocument.id);
       const response = await authenticatedFetch(
-        `${LIBRARY_API_URL}/api/library/${contentType}/${contentId}`,
+        `${API_BASE_URL}/api/library/${contentType}/${contentId}`,
         { headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` } },
       );
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(typeof data.detail === "string" ? data.detail : "Unable to load document details.");
       }
-      let body = data.body;
+      let body = data.body ?? data.data?.body ?? sourceDocument.body ?? sourceDocument.data?.body ?? sourceDocument.data;
       if (typeof body === "string") {
         try {
           body = JSON.parse(body);
@@ -184,17 +160,22 @@ export default function LibraryPage() {
           // Keep non-JSON document bodies as text.
         }
       }
-      setDocumentDetails({
+      const nextDetails = {
+        ...sourceDocument,
         ...data,
         body,
-        content_type: data.content_type || document.content_type,
-      });
+        content_type: data.content_type || sourceDocument.content_type,
+      };
+      setDocumentDetails(nextDetails);
+      updateCachedLibraryDocument(nextDetails);
     } catch (requestError) {
-      setDetailsError(requestError.message === "Failed to fetch"
-        ? "Unable to connect to the library service. Try again later."
-        : requestError.message || "Unable to load document details.");
+      if (!cachedDetails) {
+        setDetailsError(requestError.message === "Failed to fetch"
+          ? "Unable to connect to the library service. Try again later."
+          : requestError.message || "Unable to load document details.");
+      }
     } finally {
-      setDetailsLoading(false);
+      if (!cachedDetails) setDetailsLoading(false);
     }
   };
 
@@ -213,7 +194,6 @@ export default function LibraryPage() {
           </a>
           <input className="library-topbar-search" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search documents…" aria-label="Search documents" />
           <div className="home-topbar-user">
-            <span className="home-topbar-date">{formattedDate}, 2026</span>
             <span className="home-avatar">{initials || "T"}</span>
             <strong>{userName}</strong>
           </div>
@@ -255,7 +235,9 @@ export default function LibraryPage() {
                 <div className="library-login-divider"><span>or</span></div>
                 <small>Don&apos;t have an account yet? Create one to start building<br />your library today.</small>
               </section>
-            ) : error ? <p className="library-empty">{error}</p> : groupedDocuments.length > 0 ? groupedDocuments.map((group) => (
+            ) : error && !groupedDocuments.length ? <p className="library-empty">{error}</p> : groupedDocuments.length > 0 ? (
+              <>
+                {groupedDocuments.map((group) => (
               <section className="library-group" key={group.group}>
                 <h2>{group.group}</h2>
                 <div className="library-list">
@@ -294,7 +276,9 @@ export default function LibraryPage() {
                   ))}
                 </div>
               </section>
-            )) : <p className="library-empty">
+                ))}
+              </>
+            ) : <p className="library-empty">
               {typeFilter === "all" ? "No documents match your search." : `No ${LIBRARY_TYPE_FILTERS.find(([value]) => value === typeFilter)?.[1].toLowerCase() || "documents"} found.`}
             </p>}
           </div>
@@ -432,7 +416,7 @@ export function DocumentPreview({ document, details, loading, error, onClose }) 
     setPdfLoading(true);
     setPdfError("");
     try {
-      const response = await authenticatedFetch(`${LIBRARY_API_URL}/api/pdf/generate`, {
+      const response = await authenticatedFetch(`${API_BASE_URL}/api/pdf/generate`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -462,7 +446,7 @@ export function DocumentPreview({ document, details, loading, error, onClose }) 
     setDocxLoading(true);
     setDocxError("");
     try {
-      const response = await authenticatedFetch(`${LIBRARY_API_URL}/api/docx/generate`, {
+      const response = await authenticatedFetch(`${API_BASE_URL}/api/docx/generate`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -492,7 +476,7 @@ export function DocumentPreview({ document, details, loading, error, onClose }) 
     setAnswerKeyLoading(true);
     setAnswerKeyError("");
     try {
-      const response = await authenticatedFetch(`${LIBRARY_API_URL}/api/answer-key/generate`, {
+      const response = await authenticatedFetch(`${API_BASE_URL}/api/answer-key/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: {
@@ -520,7 +504,7 @@ export function DocumentPreview({ document, details, loading, error, onClose }) 
     setAnswerKeyPdfLoading(true);
     setAnswerKeyPdfError("");
     try {
-      const response = await authenticatedFetch(`${LIBRARY_API_URL}/api/pdf/generate`, {
+      const response = await authenticatedFetch(`${API_BASE_URL}/api/pdf/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: {

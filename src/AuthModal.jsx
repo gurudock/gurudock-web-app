@@ -1,8 +1,6 @@
 import React, { useState } from "react";
 import logoUrl from "./assets/gurudock-logo.png";
-import { authenticatedFetch } from "./apiClient";
-
-const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? "/api" : "https://testing.api.gurudock.com");
+import { API_BASE_URL, authenticatedFetch } from "./apiClient";
 
 function formatApiError(detail) {
   if (typeof detail === "string" && detail.trim()) return detail;
@@ -76,7 +74,7 @@ export default function AuthModal({ mode = "login", onClose, onModeChange, onAut
       requestOptions.body = JSON.stringify(requestOptions.body);
     }
     try {
-      response = await authenticatedFetch(`${API_URL}${path}`, {
+      response = await authenticatedFetch(`${API_BASE_URL}${path}`, {
         ...requestOptions,
         headers,
       }, { refreshOnUnauthorized: false });

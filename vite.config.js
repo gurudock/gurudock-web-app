@@ -5,22 +5,16 @@ export default defineConfig({
   plugins: [react()],
 
   server: {
-    allowedHosts: [".ngrok-free.dev"],
+    host: "0.0.0.0",
+    port: 3000,
+
+    allowedHosts: [".ngrok-free.app", ".ngrok-free.dev"],
 
     proxy: {
-      "/api/library": {
-        target: "https://testing.api.gurudock.com",
-        changeOrigin: true,
-      },
-
-      "/api/lesson-plan": {
-        target: "https://testing.api.gurudock.com",
-        changeOrigin: true,
-      },
-
       "/api": {
         target: "https://testing.api.gurudock.com",
         changeOrigin: true,
+        secure: true,
         rewrite: (path) => path.replace(/^\/api/, ""),
       },
     },
