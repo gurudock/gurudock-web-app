@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import logoUrl from "./assets/gurudock-logo.png";
 import LibrarySidebar from "./LibrarySidebar";
-import { API_BASE_URL, authenticatedFetch } from "./apiClient";
+import { studentsService } from "./services/studentsService";
+import { testsService } from "./services/testsService";
 
 const today = new Date().toISOString().slice(0, 10);
 const TESTS_CACHE_KEY = "gurudock_tests_cache";
@@ -88,11 +89,8 @@ export default function TestsPage() {
   const loadStudentsForTest = async (test) => {
     const cachedStudents = readCache(TEST_STUDENTS_CACHE_KEY, "students");
     try {
-      const response = await authenticatedFetch(`${API_BASE_URL}/students`);
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok || !Array.isArray(data)) {
-        throw new Error(typeof data.detail === "string" ? data.detail : "Unable to load students for this test.");
-      }
+      const data = await studentsService.list();
+      if (!Array.isArray(data)) throw new Error("Unable to load students for this test.");
       writeCache(TEST_STUDENTS_CACHE_KEY, "students", data);
       return data.filter((student) => studentMatchesTest(student, test));
     } catch (error) {
@@ -112,11 +110,8 @@ export default function TestsPage() {
       if (!cachedTests) setTestsLoading(true);
       setTestsError("");
       try {
-        const response = await authenticatedFetch(`${API_BASE_URL}/tests`);
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok || !Array.isArray(data)) {
-          throw new Error(typeof data.detail === "string" ? data.detail : "Unable to load tests.");
-        }
+        const data = await testsService.list();
+        if (!Array.isArray(data)) throw new Error("Unable to load tests.");
         if (active) {
           setCreatedTests(data);
           writeCache(TESTS_CACHE_KEY, "tests", data);
@@ -136,14 +131,12 @@ export default function TestsPage() {
     setTestDetail({ ...test, marks: [] });
     try {
       const [detailResponse, studentsResponse] = await Promise.all([
-        authenticatedFetch(`${API_BASE_URL}/tests/${test.id}`),
+        testsService.get(test.id),
         loadStudentsForTest(test),
       ]);
-      const data = await detailResponse.json().catch(() => ({}));
+      const data = detailResponse;
       const studentsData = studentsResponse;
-      if (!detailResponse.ok || !data.id) {
-        throw new Error(typeof data.detail === "string" ? data.detail : "Unable to load test details.");
-      }
+      if (!data?.id) throw new Error("Unable to load test details.");
       if (!Array.isArray(studentsData)) {
         throw new Error(typeof studentsData.detail === "string" ? studentsData.detail : "Unable to load students for this test.");
       }
@@ -180,9 +173,7 @@ export default function TestsPage() {
     if (!testDeleteConfirmation || testDeleting) return;
     setTestDeleting(true);
     try {
-      const response = await authenticatedFetch(`${API_BASE_URL}/tests/${testDeleteConfirmation.id}`, { method: "DELETE" });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Unable to delete test.");
+      const data = await testsService.delete(testDeleteConfirmation.id);
       setCreatedTests((current) => {
         const nextTests = current.filter((test) => test.id !== testDeleteConfirmation.id);
         writeCache(TESTS_CACHE_KEY, "tests", nextTests);
@@ -226,15 +217,7 @@ export default function TestsPage() {
         is_absent: Boolean(entry.is_absent),
         remarks: entry.remarks?.trim() || null,
       }));
-      const response = await authenticatedFetch(`${API_BASE_URL}/tests/${testDetail.id}/marks`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: payload,
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(typeof data.detail === "string" ? data.detail : "Unable to save marks.");
-      }
+      await testsService.saveMarks(testDetail.id, payload);
       const changedCount = testDetail.marks.filter((entry) => {
         const initial = testDetailInitialMarks[entry.student_id] || {
           marks_obtained: 0,
@@ -285,22 +268,15 @@ export default function TestsPage() {
 
     setSaving(true);
     try {
-      const response = await authenticatedFetch(`${API_BASE_URL}/tests`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: {
+      const data = await testsService.create({
           title: form.title.trim(),
           subject: form.subject.trim(),
           class_section: form.section,
           class_level: `Class ${form.classLevel}`,
           max_marks: Number(form.maxMarks),
           test_date: form.testDate,
-        },
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok || !data.id) {
-        throw new Error(typeof data.detail === "string" ? data.detail : "Unable to create test.");
-      }
+        });
+      if (!data?.id) throw new Error("Unable to create test.");
       setCreatedTests((current) => {
         const nextTests = [data, ...current];
         writeCache(TESTS_CACHE_KEY, "tests", nextTests);
@@ -343,15 +319,7 @@ export default function TestsPage() {
         is_absent: Boolean(marks[student.id]?.isAbsent),
         remarks: marks[student.id]?.remarks?.trim() || null,
       }));
-      const response = await authenticatedFetch(`${API_BASE_URL}/tests/${activeTest.id}/marks`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: payload,
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(typeof data.detail === "string" ? data.detail : "Unable to save marks.");
-      }
+      await testsService.saveMarks(activeTest.id, payload);
       const changedCount = testStudents.filter((student) => {
         const entry = marks[student.id];
         return Boolean(entry?.isAbsent)

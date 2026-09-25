@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import logoUrl from "./assets/gurudock-logo.png";
-import { API_BASE_URL, authenticatedFetch } from "./apiClient";
+import { authService } from "./services/authService";
 
 function formatApiError(detail) {
   if (typeof detail === "string" && detail.trim()) return detail;
@@ -67,23 +67,25 @@ export default function AuthModal({ mode = "login", onClose, onModeChange, onAut
     onAuthenticated?.({ name, email });
   };
   const request = async (path, options = {}) => {
-    let response;
-    const requestOptions = { ...options };
-    const headers = { "Content-Type": "application/json", ...(requestOptions.headers || {}) };
-    if (requestOptions.body && typeof requestOptions.body !== "string" && !(requestOptions.body instanceof URLSearchParams)) {
-      requestOptions.body = JSON.stringify(requestOptions.body);
-    }
+    const payload = options.body;
     try {
-      response = await authenticatedFetch(`${API_BASE_URL}${path}`, {
-        ...requestOptions,
-        headers,
-      }, { refreshOnUnauthorized: false });
-    } catch {
-      throw new Error("Unable to reach the authentication service. Please check the API CORS settings or try again.");
+      if (path === "/auth/login") {
+        const values = payload instanceof URLSearchParams ? Object.fromEntries(payload) : payload;
+        return authService.login({ username: values.username, password: values.password });
+      }
+      if (path === "/auth/register") return authService.register(payload);
+      if (path === "/auth/verify-email-otp") return authService.verifyEmailOtp(payload);
+      if (path === "/auth/forgot-password/request-otp") return authService.requestPasswordOtp(payload);
+      if (path === "/auth/forgot-password/verify-otp") return authService.verifyPasswordOtp(payload);
+      if (path === "/auth/forgot-password/reset") return authService.resetPassword(payload);
+      if (path === "/auth/resend-email-otp") return authService.resendEmailOtp(payload);
+      if (path === "/auth/change-password") return authService.changePassword(payload);
+      if (path === "/auth/me") return authService.getCurrentUser();
+      throw new Error("Unsupported authentication request.");
+    } catch (requestError) {
+      if (requestError?.name === "AbortError") throw requestError;
+      throw new Error(formatApiError(requestError?.details || requestError?.message || requestError));
     }
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(formatApiError(data.detail || data.error || data.message));
-    return data;
   };
   const submit = async (event) => {
     event.preventDefault();

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { handleWorkspaceWheel } from "./LibraryPage";
 import { DocumentPreview } from "./LibraryPage";
 import LibrarySidebar from "./LibrarySidebar";
-import { API_BASE_URL, authenticatedFetch } from "./apiClient";
+import { contentService } from "./services/contentService";
 import logoUrl from "./assets/gurudock-logo.png";
 import { cacheGeneratedLibraryDocument } from "./libraryCache";
 import { readAvailableContentCache, writeAvailableContentCache } from "./availableContentCache";
@@ -112,11 +112,8 @@ export default function CreatePage({ initialMode = null }) {
     }
     const loadCurriculum = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/content/available-content`, { signal: controller.signal });
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok || !data || typeof data !== "object" || Array.isArray(data)) {
-          throw new Error("Unable to load available curriculum.");
-        }
+        const data = await contentService.getAvailableContent({ signal: controller.signal });
+        if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("Unable to load available curriculum.");
         writeContentCache(CURRICULUM_CACHE_KEY, data);
         writeAvailableContentCache(data);
         setCurriculum(data);
@@ -186,20 +183,14 @@ export default function CreatePage({ initialMode = null }) {
         setLessonChapter("");
       }
       try {
-        const response = await fetch(`${API_BASE_URL}/content/chapters-topics`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
+        const data = await contentService.getChaptersTopics({
             board,
             grade,
             subject,
             book_name: "",
-          }),
-          signal: controller.signal,
-        });
-        const data = await response.json().catch(() => ({}));
+          }, { signal: controller.signal });
         const chaptersResponse = data?.chapters || data?.data?.chapters;
-        if (!response.ok || !chaptersResponse || typeof chaptersResponse !== "object" || Array.isArray(chaptersResponse)) {
+        if (!chaptersResponse || typeof chaptersResponse !== "object" || Array.isArray(chaptersResponse)) {
           throw new Error("Unable to load chapters and topics.");
         }
         if (!applyChapters(chaptersResponse)) throw new Error("No chapters are available for this curriculum.");
@@ -314,13 +305,7 @@ export default function CreatePage({ initialMode = null }) {
 
       setGenerationLoading(true);
       try {
-        const lessonPlanEndpoint = import.meta.env.DEV
-          ? "/api/lesson-plan/generate"
-          : `${API_BASE_URL}/api/lesson-plan/generate`;
-        const response = await authenticatedFetch(lessonPlanEndpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
+        const lessonPlan = await contentService.generateLessonPlan({
             subject,
             chapter: lessonChapterData.name,
             class_level: className.replace(/^Class\s+/i, ""),
@@ -328,12 +313,7 @@ export default function CreatePage({ initialMode = null }) {
             language: "english",
             num_periods: lessonPeriods,
             force_regenerate: false,
-          }),
-        });
-        const lessonPlan = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          throw new Error(lessonPlan.detail || lessonPlan.message || lessonPlan.error || "Unable to generate the lesson plan.");
-        }
+          });
         const contentId = lessonPlan.content_id || lessonPlan.contentId || lessonPlan.id;
         if (!contentId) throw new Error("Lesson plan was generated but no content ID was returned.");
         const generatedDocument = {
@@ -380,10 +360,7 @@ export default function CreatePage({ initialMode = null }) {
 
       setGenerationLoading(true);
       try {
-        const response = await authenticatedFetch(`${API_BASE_URL}/worksheet/generate`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
+        const worksheet = await contentService.generateWorksheet({
             subject,
             chapter: worksheetChapter.name,
             class_level: className.replace(/^Class\s+/i, ""),
@@ -399,12 +376,7 @@ export default function CreatePage({ initialMode = null }) {
             num_questions: worksheetQuestions,
             total_marks: worksheetMarks,
             variant_mode: false,
-          }),
-        });
-        const worksheet = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          throw new Error(worksheet.detail || worksheet.message || worksheet.error || "Unable to generate the worksheet.");
-        }
+          });
         const contentId = worksheet.content_id || worksheet.contentId || worksheet.id;
         if (!contentId) throw new Error("Worksheet was generated but no content ID was returned.");
         const generatedDocument = {
@@ -451,10 +423,7 @@ export default function CreatePage({ initialMode = null }) {
 
       setGenerationLoading(true);
       try {
-        const response = await authenticatedFetch(`${API_BASE_URL}/assignment/generate`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
+        const responseData = await contentService.generateAssignment({
             board,
             grade: className.replace(/^Class\s+/i, ""),
             subject,
@@ -471,12 +440,7 @@ export default function CreatePage({ initialMode = null }) {
             chapters: {
               [assignmentChapter.name]: assignmentChapter.topics,
             },
-          }),
-        });
-        const responseData = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          throw new Error(responseData.detail || responseData.message || responseData.error || "Unable to generate the assignment.");
-        }
+          });
         const assignment = responseData.data && typeof responseData.data === "object"
           ? responseData.data
           : responseData;
@@ -530,10 +494,7 @@ export default function CreatePage({ initialMode = null }) {
     }
     setGenerationLoading(true);
     try {
-      const response = await authenticatedFetch(`${API_BASE_URL}/question-paper/generate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const data = await contentService.generateQuestionPaper({
           board,
           grade: className.replace(/^Class\s+/i, ""),
           subject,
@@ -557,10 +518,7 @@ export default function CreatePage({ initialMode = null }) {
             questions_to_attempt: Number(section.attempts) || 0,
             marks_per_question: Number(section.marks) || 0,
           })),
-        }),
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.detail || data.message || data.error || "Unable to generate the question paper.");
+        });
       const paper = data.data && typeof data.data === "object" ? data.data : data;
       const contentId = data.content_id || data.contentId || data.id || paper.content_id || paper.contentId || paper.id;
       if (!contentId) throw new Error("Question paper was generated but no content ID was returned.");

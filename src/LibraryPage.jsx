@@ -2,12 +2,11 @@ import React, { useEffect, useRef, useState } from "react";
 import emptyLibraryUrl from "./assets/empty-library.png";
 import libraryLoadingUrl from "./assets/library-loading.png";
 import logoUrl from "./assets/gurudock-logo.png";
-import { API_BASE_URL, authenticatedFetch } from "./apiClient";
+import { libraryService } from "./services/libraryService";
 import AuthModal from "./AuthModal";
 import LibrarySidebar from "./LibrarySidebar";
 import { readCachedLibraryDocument, readLibraryCache, updateCachedLibraryDocument, writeLibraryCache } from "./libraryCache";
 
-const LIBRARY_API_ORIGIN = "https://testing.api.gurudock.com";
 const LIBRARY_TYPE_FILTERS = [
   ["all", "All"],
   ["question_paper", "Question papers"],
@@ -15,6 +14,13 @@ const LIBRARY_TYPE_FILTERS = [
   ["worksheet", "Worksheets"],
   ["lesson_plan", "Lesson plans"],
 ];
+
+function getServiceErrorMessage(error, fallback) {
+  if (error?.code === "NETWORK_ERROR") return "Unable to connect to the library service. Try again later.";
+  const detail = error?.details?.detail;
+  if (error?.code === "HTTP_ERROR" && typeof detail !== "string") return fallback;
+  return error?.message || fallback;
+}
 
 export default function LibraryPage() {
   const [userName, setUserName] = useState(() => localStorage.getItem("user_name") || "Teacher");
@@ -71,17 +77,13 @@ export default function LibraryPage() {
       }
 
       try {
-        const params = new URLSearchParams({ page: "1", limit: "100" });
-        if (normalizedQuery) params.set("search", normalizedQuery);
-        const response = await authenticatedFetch(`${API_BASE_URL}/api/library?${params}`, {
-          headers: { Authorization: `Bearer ${token}` },
+        const data = await libraryService.list({
+          page: "1",
+          limit: "100",
+          ...(normalizedQuery ? { search: normalizedQuery } : {}),
+        }, {
           signal: controller.signal,
         });
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          const detail = data.detail;
-          throw new Error(typeof detail === "string" ? detail : "Unable to load your library.");
-        }
         const nextDocuments = (data.items || []).map(mapLibraryItem);
         writeLibraryCache(normalizedQuery, nextDocuments);
         setDocuments(nextDocuments);
@@ -91,15 +93,14 @@ export default function LibraryPage() {
       } catch (requestError) {
         if (requestError.name !== "AbortError") {
           if (cachedDocuments.length) {
-            setError(requestError.message === "Failed to fetch documents"
-              ? "Unable to refresh your library. Showing cached documents."
-              : `${requestError.message || "Unable to refresh your library."} Showing cached documents.`);
+            const errorMessage = requestError.code === "NETWORK_ERROR"
+              ? "Unable to refresh your library."
+              : getServiceErrorMessage(requestError, "Unable to refresh your library.");
+            setError(`${errorMessage} Showing cached documents.`);
           } else {
             setDocuments([]);
             setSelectedDocument(null);
-            setError(requestError.message === "Failed to fetch documents"
-              ? "Unable to connect to the library service. Try again later."
-              : requestError.message || "Unable to load your library.");
+            setError(getServiceErrorMessage(requestError, "Unable to load your library."));
           }
         }
       } finally {
@@ -142,16 +143,7 @@ export default function LibraryPage() {
       setDetailsLoading(false);
     }
     try {
-      const contentType = encodeURIComponent(sourceDocument.content_type);
-      const contentId = encodeURIComponent(sourceDocument.id);
-      const response = await authenticatedFetch(
-        `${API_BASE_URL}/api/library/${contentType}/${contentId}`,
-        { headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` } },
-      );
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(typeof data.detail === "string" ? data.detail : "Unable to load document details.");
-      }
+      const data = await libraryService.get(sourceDocument.content_type, sourceDocument.id);
       let body = data.body ?? data.data?.body ?? sourceDocument.body ?? sourceDocument.data?.body ?? sourceDocument.data;
       if (typeof body === "string") {
         try {
@@ -170,9 +162,7 @@ export default function LibraryPage() {
       updateCachedLibraryDocument(nextDetails);
     } catch (requestError) {
       if (!cachedDetails) {
-        setDetailsError(requestError.message === "Failed to fetch"
-          ? "Unable to connect to the library service. Try again later."
-          : requestError.message || "Unable to load document details.");
+        setDetailsError(getServiceErrorMessage(requestError, "Unable to load document details."));
       }
     } finally {
       if (!cachedDetails) setDetailsLoading(false);
@@ -416,27 +406,15 @@ export function DocumentPreview({ document, details, loading, error, onClose }) 
     setPdfLoading(true);
     setPdfError("");
     try {
-      const response = await authenticatedFetch(`${API_BASE_URL}/api/pdf/generate`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("access_token")}`,
-        },
-        body: JSON.stringify({
-          content_type: details.content_type,
-          content_id: details.id || document.id,
-          title,
-        }),
+      const data = await libraryService.generatePdf({
+        content_type: details.content_type,
+        content_id: details.id || document.id,
+        title,
       });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        const detail = typeof data.detail === "string" ? data.detail : "Unable to create PDF.";
-        throw new Error(detail);
-      }
       if (!data.download_url) throw new Error("PDF was created but no download link was returned.");
       setPdfUrl(data.download_url);
     } catch (requestError) {
-      setPdfError(requestError.message || "Unable to create PDF.");
+      setPdfError(getServiceErrorMessage(requestError, "Unable to create PDF."));
     } finally {
       setPdfLoading(false);
     }
@@ -446,27 +424,15 @@ export function DocumentPreview({ document, details, loading, error, onClose }) 
     setDocxLoading(true);
     setDocxError("");
     try {
-      const response = await authenticatedFetch(`${API_BASE_URL}/api/docx/generate`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("access_token")}`,
-        },
-        body: JSON.stringify({
-          content_type: details.content_type,
-          content_id: details.id || document.id,
-        }),
+      const data = await libraryService.generateDocx({
+        content_type: details.content_type,
+        content_id: details.id || document.id,
       });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        const detail = typeof data.detail === "string" ? data.detail : "Unable to create DOCX.";
-        throw new Error(detail);
-      }
       const downloadUrl = data.download_url || data.docx_download_url;
       if (!downloadUrl) throw new Error("DOCX was created but no download link was returned.");
       setDocxUrl(downloadUrl);
     } catch (requestError) {
-      setDocxError(requestError.message || "Unable to create DOCX.");
+      setDocxError(getServiceErrorMessage(requestError, "Unable to create DOCX."));
     } finally {
       setDocxLoading(false);
     }
@@ -476,25 +442,16 @@ export function DocumentPreview({ document, details, loading, error, onClose }) 
     setAnswerKeyLoading(true);
     setAnswerKeyError("");
     try {
-      const response = await authenticatedFetch(`${API_BASE_URL}/api/answer-key/generate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: {
-          content_type: details.content_type,
-          content_id: details.id || document.id,
-        },
+      const data = await libraryService.generateAnswerKey({
+        content_type: details.content_type,
+        content_id: details.id || document.id,
       });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        const detail = typeof data.detail === "string" ? data.detail : "Unable to create answer key.";
-        throw new Error(detail);
-      }
       if (!Array.isArray(data.data?.answers)) {
         throw new Error("Answer key was created but no answers were returned.");
       }
       setAnswerKey({ ...data.data, answer_key_id: data.answer_key_id });
     } catch (requestError) {
-      setAnswerKeyError(requestError.message || "Unable to create answer key.");
+      setAnswerKeyError(getServiceErrorMessage(requestError, "Unable to create answer key."));
     } finally {
       setAnswerKeyLoading(false);
     }
@@ -504,23 +461,14 @@ export function DocumentPreview({ document, details, loading, error, onClose }) 
     setAnswerKeyPdfLoading(true);
     setAnswerKeyPdfError("");
     try {
-      const response = await authenticatedFetch(`${API_BASE_URL}/api/pdf/generate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: {
-          content_type: "answer_key",
-          content_id: answerKey.answer_key_id,
-        },
+      const data = await libraryService.generatePdf({
+        content_type: "answer_key",
+        content_id: answerKey.answer_key_id,
       });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        const detail = typeof data.detail === "string" ? data.detail : "Unable to create answer key PDF.";
-        throw new Error(detail);
-      }
       if (!data.download_url) throw new Error("Answer key PDF was created but no download link was returned.");
       setAnswerKeyPdfUrl(data.download_url);
     } catch (requestError) {
-      setAnswerKeyPdfError(requestError.message || "Unable to create answer key PDF.");
+      setAnswerKeyPdfError(getServiceErrorMessage(requestError, "Unable to create answer key PDF."));
     } finally {
       setAnswerKeyPdfLoading(false);
     }
@@ -533,21 +481,7 @@ export function DocumentPreview({ document, details, loading, error, onClose }) 
     try {
       const lessonPlanId = details.id || details.content_id || document?.id;
       if (!lessonPlanId) throw new Error("This lesson plan has no content ID to update.");
-      const lessonPlanUpdateEndpoint = import.meta.env.DEV
-        ? `/api/lesson-plan/${encodeURIComponent(lessonPlanId)}`
-        : `${LIBRARY_API_ORIGIN}/api/lesson-plan/${encodeURIComponent(lessonPlanId)}`;
-      const response = await authenticatedFetch(
-        lessonPlanUpdateEndpoint,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: { body: lessonPlanForm },
-        },
-      );
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(typeof data.detail === "string" ? data.detail : "Unable to save lesson plan.");
-      }
+      const data = await libraryService.updateLessonPlan(lessonPlanId, { body: lessonPlanForm });
       const updatedBody = data.body || data.data?.body || lessonPlanForm;
       setLessonPlanForm(updatedBody);
       updateCachedLibraryDocument({
@@ -558,7 +492,7 @@ export function DocumentPreview({ document, details, loading, error, onClose }) 
       setLessonPlanEditing(false);
       setLessonPlanMessage("Lesson plan saved");
     } catch (requestError) {
-      setLessonPlanError(requestError.message || "Unable to save lesson plan.");
+      setLessonPlanError(getServiceErrorMessage(requestError, "Unable to save lesson plan."));
     } finally {
       setLessonPlanSaving(false);
     }

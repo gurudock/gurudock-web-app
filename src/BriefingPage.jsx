@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import logoUrl from "./assets/gurudock-logo.png";
-import { API_BASE_URL, authenticatedFetch } from "./apiClient";
+import { contentService } from "./services/contentService";
 import { handleWorkspaceWheel } from "./LibraryPage";
 import LibrarySidebar from "./LibrarySidebar";
 import { readAvailableContentCache, writeAvailableContentCache } from "./availableContentCache";
@@ -61,10 +61,9 @@ export default function BriefingPage() {
     };
     const cachedCurriculum = readAvailableContentCache();
     if (cachedCurriculum) applyCurriculum(cachedCurriculum);
-    fetch(`${API_BASE_URL}/content/available-content`, { signal: controller.signal })
-      .then(async (response) => {
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok || !data || typeof data !== "object" || Array.isArray(data)) throw new Error("Unable to load curriculum.");
+    contentService.getAvailableContent({ signal: controller.signal })
+      .then((data) => {
+        if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("Unable to load curriculum.");
         writeAvailableContentCache(data);
         applyCurriculum(data);
       })
@@ -81,15 +80,12 @@ export default function BriefingPage() {
     if (!board || !grade || !form.subject) return undefined;
     const controller = new AbortController();
     setChaptersLoading(true);
-    fetch(`${API_BASE_URL}/content/chapters-topics`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ board, grade, subject: form.subject, book_name: "" }),
-      signal: controller.signal,
-    }).then(async (response) => {
-      const data = await response.json().catch(() => ({}));
+    contentService.getChaptersTopics(
+      { board, grade, subject: form.subject, book_name: "" },
+      { signal: controller.signal },
+    ).then((data) => {
       const chapterData = data?.chapters || data?.data?.chapters;
-      if (!response.ok || !chapterData || typeof chapterData !== "object") throw new Error("Unable to load chapters.");
+      if (!chapterData || typeof chapterData !== "object") throw new Error("Unable to load chapters.");
       const nextChapters = Object.keys(chapterData);
       setChapters(nextChapters);
       setForm((current) => ({ ...current, chapter: nextChapters.includes(current.chapter) ? current.chapter : nextChapters[0] || "" }));
@@ -102,10 +98,7 @@ export default function BriefingPage() {
     setBriefingLoading(true);
     setBriefingError("");
     try {
-      const response = await authenticatedFetch(`${API_BASE_URL}/briefing/pull/stand_alone`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: {
+      const data = await contentService.pullBriefing({
           board: briefingContext?.board || "CBSE",
           class_level: form.className.replace(/^Class\s+/i, "").split("-")[0].trim(),
           subject: form.subject,
@@ -113,10 +106,7 @@ export default function BriefingPage() {
           language: "english",
           llm_provider: "anthropic",
           force_regenerate: true,
-        },
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.detail || data.message || "Unable to generate the briefing.");
+        });
       const nextBriefing = { ...data, generated_at: data.generated_at || new Date().toISOString() };
       const nextPrevious = [nextBriefing, ...previousBriefings.filter((item) => item.id !== nextBriefing.id)].slice(0, 12);
       localStorage.setItem("gurudock_previous_briefings", JSON.stringify(nextPrevious));

@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import logoUrl from "./assets/gurudock-logo.png";
 import LibrarySidebar from "./LibrarySidebar";
-import { API_BASE_URL, authenticatedFetch } from "./apiClient";
+import { studentsService } from "./services/studentsService";
+import { contentService } from "./services/contentService";
 import { readAvailableContentCache, writeAvailableContentCache } from "./availableContentCache";
 
 const STUDENTS_CACHE_KEY = "gurudock_students_cache";
@@ -155,11 +156,8 @@ export default function StudentsPage() {
       if (!cachedStudents) setStudentsLoading(true);
       setStudentsError("");
       try {
-        const response = await authenticatedFetch(`${API_BASE_URL}/students`);
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok || !Array.isArray(data)) {
-          throw new Error(typeof data.detail === "string" ? data.detail : "Unable to load students.");
-        }
+        const data = await studentsService.list();
+        if (!Array.isArray(data)) throw new Error("Unable to load students.");
         if (active) {
           const nextStudents = data.map(normalizeStudent);
           setStudents(nextStudents);
@@ -188,11 +186,7 @@ export default function StudentsPage() {
     if (cachedContent) setAvailableClasses(extractAvailableClasses(cachedContent));
     const loadAvailableClasses = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/content/available-content`, {
-          signal: controller.signal,
-        });
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error("Unable to load available classes.");
+        const data = await contentService.getAvailableContent({ signal: controller.signal });
         writeAvailableContentCache(data);
         setAvailableClasses(extractAvailableClasses(data));
       } catch (error) {
@@ -275,20 +269,9 @@ export default function StudentsPage() {
             class_level: `Class ${form.className}`,
             board: "CBSE",
         }));
-        const response = await authenticatedFetch(`${API_BASE_URL}/students/bulk`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: studentPayloads,
-        });
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          throw new Error(getApiError(data, `Unable to add students (HTTP ${response.status}).`));
-        }
-        const refreshResponse = await authenticatedFetch(`${API_BASE_URL}/students`);
-        const refreshedStudents = await refreshResponse.json().catch(() => ({}));
-        if (!refreshResponse.ok || !Array.isArray(refreshedStudents)) {
-          throw new Error(getApiError(refreshedStudents, "Students were saved, but the roster could not be refreshed."));
-        }
+        const data = await studentsService.createBulk(studentPayloads);
+        const refreshedStudents = await studentsService.list();
+        if (!Array.isArray(refreshedStudents)) throw new Error("Students were saved, but the roster could not be refreshed.");
         const nextStudents = refreshedStudents.map(normalizeStudent);
         setStudents(nextStudents);
         writeStudentsCache(nextStudents);
@@ -332,11 +315,8 @@ export default function StudentsPage() {
     setStudentDetailLoading(!cachedDetail);
     setStudentDetailError("");
     try {
-      const response = await authenticatedFetch(`${API_BASE_URL}/students/${student.id}`);
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok || !data.id) {
-        throw new Error(typeof data.detail === "string" ? data.detail : "Unable to load student details.");
-      }
+      const data = await studentsService.get(student.id);
+      if (!data?.id) throw new Error("Unable to load student details.");
       const nextStudent = {
         ...normalizeStudent(data),
         board: data.board || "—",
@@ -367,20 +347,12 @@ export default function StudentsPage() {
 
     setStudentSaving(true);
     try {
-      const response = await authenticatedFetch(`${API_BASE_URL}/students/${selectedStudent.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: {
+      const data = await studentsService.update(selectedStudent.id, {
           name: studentEditForm.name.trim(),
           roll_number: studentEditForm.roll.trim(),
           class_section: studentEditForm.section.trim(),
           class_level: `Class ${studentEditForm.className.trim()}`,
-        },
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(typeof data.detail === "string" ? data.detail : "Unable to update student.");
-      }
+        });
 
       const updatedStudent = {
         ...selectedStudent,
@@ -411,11 +383,10 @@ export default function StudentsPage() {
     setStudentDeleting(true);
     try {
       const results = await Promise.all(studentIds.map(async (studentId) => {
-        const response = await authenticatedFetch(`${API_BASE_URL}/students/${studentId}`, { method: "DELETE" });
-        const data = await response.json().catch(() => ({}));
+        const data = await studentsService.delete(studentId);
         return {
           studentId,
-          success: response.ok,
+          success: true,
           message: typeof data.detail === "string" ? data.detail : "",
         };
       }));

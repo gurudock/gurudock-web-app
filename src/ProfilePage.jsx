@@ -2,7 +2,10 @@ import React, { useEffect, useRef, useState } from "react";
 import { handleWorkspaceWheel } from "./LibraryPage";
 import LibrarySidebar from "./LibrarySidebar";
 import AuthModal from "./AuthModal";
-import { API_BASE_URL, authenticatedFetch } from "./apiClient";
+import { authenticatedFetch } from "./apiClient";
+import { contentService } from "./services/contentService";
+import { preferencesService } from "./services/preferencesService";
+import { profileService } from "./services/profileService";
 import { readAvailableContentCache, writeAvailableContentCache } from "./availableContentCache";
 
 const PROFILE_CACHE_KEY = "gurudock_profile_cache";
@@ -53,11 +56,7 @@ export default function ProfilePage() {
       if (!localStorage.getItem("access_token")) return;
 
       try {
-        const response = await authenticatedFetch(`${API_BASE_URL}/auth/me`);
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          throw new Error(typeof data.detail === "string" ? data.detail : "Unable to load profile details.");
-        }
+        const data = await profileService.getCurrentUser();
 
         const name = data.name || getNameFromEmail(data.email || "");
         const email = data.email || "";
@@ -93,11 +92,8 @@ export default function ProfilePage() {
 
     const loadPreferences = async () => {
       try {
-        const response = await authenticatedFetch(`${API_BASE_URL}/preferences/`);
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok || !isPreferencesMap(data)) {
-          throw new Error(typeof data.detail === "string" ? data.detail : "Unable to load preferences.");
-        }
+        const data = await preferencesService.get();
+        if (!isPreferencesMap(data)) throw new Error("The preferences response was invalid.");
         if (active) {
           preferencesRef.current = data;
           setPreferences(data);
@@ -165,11 +161,7 @@ export default function ProfilePage() {
       if (cachedProfile) await applyProfileData(cachedProfile);
 
       try {
-        const response = await authenticatedFetch(`${API_BASE_URL}/profile/`);
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          throw new Error(data.detail || data.message || "Unable to load profile.");
-        }
+        const data = await profileService.get();
         writeProfileCache(getProfileCacheKey(), data);
         await applyProfileData(data);
       } catch (error) {
@@ -196,15 +188,7 @@ export default function ProfilePage() {
     setPreferencesMessage("");
     setPreferencesError("");
     try {
-      const response = await authenticatedFetch(`${API_BASE_URL}/preferences/replace`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: { preferences: nextPreferences },
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(typeof data.detail === "string" ? data.detail : "Unable to save preferences.");
-      }
+      const data = await preferencesService.replace(nextPreferences);
       if (!isPreferencesResponse(data)) {
         throw new Error("The preferences response was invalid.");
       }
@@ -239,13 +223,8 @@ export default function ProfilePage() {
 
     const loadCurriculum = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/content/available-content`, {
-          signal: controller.signal,
-        });
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok || !data || typeof data !== "object") {
-          throw new Error("Unable to load available curriculum.");
-        }
+        const data = await contentService.getAvailableContent({ signal: controller.signal });
+        if (!data || typeof data !== "object") throw new Error("Unable to load available curriculum.");
         writeAvailableContentCache(data);
         setCurriculum(data);
       } catch (error) {
@@ -346,13 +325,7 @@ export default function ProfilePage() {
       };
 
     try {
-      const response = await authenticatedFetch(`${API_BASE_URL}/profile/${profileTab}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: payload,
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.detail || data.message || "Unable to save profile details.");
+      await profileService.updateSection(profileTab, payload);
       if (profileTab === "personal" && personalForm.full_name.trim()) {
         localStorage.setItem("user_name", personalForm.full_name.trim());
         setUser((current) => ({ ...current, name: personalForm.full_name.trim(), initials: getInitials(personalForm.full_name.trim()) }));
@@ -384,14 +357,7 @@ export default function ProfilePage() {
     formData.append("file", file);
 
     try {
-      const response = await authenticatedFetch(`${API_BASE_URL}/profile/picture`, {
-        method: "POST",
-        body: formData,
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(data.detail || data.message || "Unable to upload profile picture.");
-      }
+      const data = await profileService.uploadPicture(formData);
 
       const pictureUrl = await resolveProfilePictureUrl(getProfilePictureUrl(data)) || URL.createObjectURL(file);
       setUser((current) => ({ ...current, pictureUrl }));
@@ -425,15 +391,7 @@ export default function ProfilePage() {
     setFeedbackMessage("");
     setFeedbackError("");
     try {
-      const response = await authenticatedFetch("https://testing.api.gurudock.com/api/feedback", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: { rating, message },
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(data.detail || data.message || "Unable to submit feedback.");
-      }
+      const data = await contentService.submitFeedback({ rating, message });
       if (data.success !== true) {
         throw new Error(data.message || "Unable to submit feedback.");
       }

@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import logoUrl from "./assets/gurudock-logo.png";
 import LibrarySidebar from "./LibrarySidebar";
 import { readAvailableContentCache, writeAvailableContentCache } from "./availableContentCache";
-import { authenticatedFetch, API_BASE_URL } from "./apiClient";
+import { contentService } from "./services/contentService";
+import { timetableService } from "./services/timetableService";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const PERIODS = [
@@ -124,11 +125,8 @@ export default function TimetablePage() {
 
     const loadCurriculum = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/content/available-content`, { signal: controller.signal });
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok || !data || typeof data !== "object" || Array.isArray(data)) {
-          throw new Error("Unable to load curriculum.");
-        }
+        const data = await contentService.getAvailableContent({ signal: controller.signal });
+        if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("Unable to load curriculum.");
 
         const board = Object.prototype.hasOwnProperty.call(data, "CBSE")
           ? "CBSE"
@@ -169,11 +167,8 @@ export default function TimetablePage() {
 
     const loadTimetable = async () => {
       try {
-        const response = await authenticatedFetch(`${API_BASE_URL}/timetable`);
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok || !Array.isArray(data)) {
-          throw new Error(data.detail || data.message || "Unable to load the timetable.");
-        }
+        const data = await timetableService.list();
+        if (!Array.isArray(data)) throw new Error("Unable to load the timetable.");
 
         const nextEntries = data
           .filter((entry) => entry && entry.day_of_week && Number(entry.period_number))
@@ -352,14 +347,7 @@ export default function TimetablePage() {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const response = await authenticatedFetch(`${API_BASE_URL}/timetable/extract`, {
-        method: "POST",
-        body: formData,
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(data.detail || data.message || "Unable to extract the timetable.");
-      }
+      const data = await timetableService.extract(formData);
 
       const extractedEntries = Array.isArray(data) ? data : data.entries;
       if (!Array.isArray(extractedEntries)) {
@@ -429,15 +417,7 @@ export default function TimetablePage() {
 
     setSaving(true);
     try {
-      const response = await authenticatedFetch(`${API_BASE_URL}/timetable/bulk`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: payload,
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(data.detail || data.message || "Unable to save the timetable.");
-      }
+      const data = await timetableService.saveBulk(payload);
 
       const nextEntries = groups.flatMap((group) =>
         group.periods.map((key) => {
