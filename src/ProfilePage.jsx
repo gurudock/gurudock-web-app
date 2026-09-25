@@ -6,7 +6,6 @@ import { API_BASE_URL, authenticatedFetch } from "./apiClient";
 import { readAvailableContentCache, writeAvailableContentCache } from "./availableContentCache";
 
 const PROFILE_CACHE_KEY = "gurudock_profile_cache";
-const PROFILE_CACHE_TTL = 24 * 60 * 60 * 1000;
 
 export default function ProfilePage() {
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
@@ -18,6 +17,11 @@ export default function ProfilePage() {
   const [profileMessage, setProfileMessage] = useState("");
   const [profileError, setProfileError] = useState("");
   const [profileSavedOpen, setProfileSavedOpen] = useState(false);
+  const [feedbackForm, setFeedbackForm] = useState({ rating: "", message: "" });
+  const [feedbackHoverRating, setFeedbackHoverRating] = useState(0);
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+  const [feedbackMessage, setFeedbackMessage] = useState("");
+  const [feedbackError, setFeedbackError] = useState("");
   const [pictureUploading, setPictureUploading] = useState(false);
   const pictureInputRef = useRef(null);
   const [authenticated, setAuthenticated] = useState(() => Boolean(localStorage.getItem("access_token")));
@@ -400,6 +404,48 @@ export default function ProfilePage() {
     }
   };
 
+  const submitFeedback = async (event) => {
+    event.preventDefault();
+    if (feedbackSubmitting) return;
+
+    const rating = Number(feedbackForm.rating);
+    const message = feedbackForm.message.trim();
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+      setFeedbackMessage("");
+      setFeedbackError("Please select a rating from 1 to 5.");
+      return;
+    }
+    if (!message) {
+      setFeedbackMessage("");
+      setFeedbackError("Please enter a message.");
+      return;
+    }
+
+    setFeedbackSubmitting(true);
+    setFeedbackMessage("");
+    setFeedbackError("");
+    try {
+      const response = await authenticatedFetch("https://testing.api.gurudock.com/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: { rating, message },
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.detail || data.message || "Unable to submit feedback.");
+      }
+      if (data.success !== true) {
+        throw new Error(data.message || "Unable to submit feedback.");
+      }
+      setFeedbackMessage(data.message || "Thank you for your feedback.");
+      setFeedbackForm({ rating: "", message: "" });
+    } catch (error) {
+      setFeedbackError(error.message || "Unable to submit feedback.");
+    } finally {
+      setFeedbackSubmitting(false);
+    }
+  };
+
   return (
     <div className="profile-app" onWheel={(event) => handleWorkspaceWheel(event, ".profile-content")}>
       <LibrarySidebar activeItem="profile" />
@@ -482,6 +528,56 @@ export default function ProfilePage() {
             </div>
 
             {authenticated && (
+              <form className="profile-card profile-feedback-form" onSubmit={submitFeedback}>
+                <ProfileSectionTitle>Share your feedback</ProfileSectionTitle>
+                <p className="profile-feedback-intro">Tell us how we can make GuruDock better for you.</p>
+                <ProfileField label="Rating">
+                  <div
+                    className="profile-rating"
+                    role="radiogroup"
+                    aria-label="Feedback rating"
+                    onMouseLeave={() => setFeedbackHoverRating(0)}
+                  >
+                    {[1, 2, 3, 4, 5].map((rating) => (
+                      <button
+                        key={rating}
+                        type="button"
+                        className={(
+                          feedbackHoverRating >= rating
+                            || (!feedbackHoverRating && Number(feedbackForm.rating) >= rating)
+                        ) ? "selected" : ""}
+                        onMouseEnter={() => setFeedbackHoverRating(rating)}
+                        onClick={() => {
+                          setFeedbackForm((current) => ({ ...current, rating: String(rating) }));
+                          setFeedbackError("");
+                        }}
+                        role="radio"
+                        aria-checked={Number(feedbackForm.rating) === rating}
+                        aria-label={`${rating} ${rating === 1 ? "star" : "stars"}`}
+                      >
+                        ★
+                      </button>
+                    ))}
+                  </div>
+                </ProfileField>
+                <ProfileField label="Message">
+                  <textarea
+                    name="message"
+                    value={feedbackForm.message}
+                    onChange={(event) => setFeedbackForm((current) => ({ ...current, message: event.target.value }))}
+                    placeholder="What would you like us to know?"
+                    rows="5"
+                    required
+                  />
+                </ProfileField>
+                {feedbackMessage && <small className="profile-form-message success">{feedbackMessage}</small>}
+                {feedbackError && <small className="profile-form-message error">{feedbackError}</small>}
+                <button type="submit" className="primary-button" disabled={feedbackSubmitting}>
+                  {feedbackSubmitting ? "Submitting…" : "Submit feedback"}
+                </button>
+              </form>
+            )}
+            {authenticated && (
               <button className="primary-button profile-logout-button" type="button" onClick={() => setLogoutOpen(true)}>Log out</button>
             )}
           </div>
@@ -539,7 +635,7 @@ function readProfileCache(cacheKey) {
   try {
     const cache = JSON.parse(localStorage.getItem(PROFILE_CACHE_KEY) || "{}");
     const entry = cache[cacheKey];
-    return entry && Date.now() - entry.cachedAt <= PROFILE_CACHE_TTL ? entry.data : null;
+    return entry ? entry.data : null;
   } catch {
     return null;
   }

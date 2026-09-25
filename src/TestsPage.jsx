@@ -4,7 +4,6 @@ import LibrarySidebar from "./LibrarySidebar";
 import { API_BASE_URL, authenticatedFetch } from "./apiClient";
 
 const today = new Date().toISOString().slice(0, 10);
-const TESTS_CACHE_TTL = 24 * 60 * 60 * 1000;
 const TESTS_CACHE_KEY = "gurudock_tests_cache";
 const TEST_STUDENTS_CACHE_KEY = "gurudock_test_students_cache";
 
@@ -16,7 +15,7 @@ function getUserCacheKey(key) {
 function readCache(key, property) {
   try {
     const cached = JSON.parse(localStorage.getItem(getUserCacheKey(key)) || "null");
-    if (!cached || Date.now() - cached.cachedAt > TESTS_CACHE_TTL || !Array.isArray(cached[property])) return null;
+    if (!cached || !Array.isArray(cached[property])) return null;
     return cached[property];
   } catch {
     return null;

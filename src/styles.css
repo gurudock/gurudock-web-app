@@ -8481,7 +8481,8 @@ form {
 }
 
 .profile-field input,
-.profile-field select {
+.profile-field select,
+.profile-field textarea {
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
@@ -8497,9 +8498,71 @@ form {
 }
 
 .profile-field input:focus,
-.profile-field select:focus {
+.profile-field select:focus,
+.profile-field textarea:focus {
   border-color: #be5f2a;
   box-shadow: 0 0 0 3px rgb(190 95 42 / 13%);
+}
+
+.profile-field textarea {
+  height: auto;
+  min-height: 110px;
+  padding: 11px 12px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.profile-feedback-form {
+  display: flex;
+  order: 3;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.profile-feedback-form .primary-button {
+  touch-action: manipulation;
+}
+
+.profile-feedback-intro {
+  margin: -6px 0 0;
+  color: #7a6e5f;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.profile-rating {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.profile-rating button {
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  color: #d8cec1;
+  cursor: pointer;
+  font-size: 32px;
+  line-height: 1;
+  touch-action: manipulation;
+  transition: color 150ms ease, transform 150ms ease;
+}
+
+.profile-rating button:hover,
+.profile-rating button:focus-visible,
+.profile-rating button.selected {
+  color: #e09a32;
+}
+
+.profile-rating button:hover,
+.profile-rating button:focus-visible {
+  transform: scale(1.08);
+}
+
+.profile-rating button:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid #be5f2a;
+  outline-offset: 2px;
 }
 
 .profile-multi-select {
@@ -8768,7 +8831,7 @@ form {
 }
 
 .profile-logout-button {
-  order: 3;
+  order: 4;
   align-self: flex-end;
   min-height: 36px;
   padding: 0 16px;
@@ -10712,6 +10775,10 @@ form {
 
   .profile-logout-button {
     margin-bottom: 24px;
+  }
+
+  .profile-feedback-form .primary-button {
+    width: 100%;
   }
 
   .profile-top-grid {

@@ -18,7 +18,6 @@ const PERIODS = [
   ["P10", "2:30–3:10"],
 ];
 const TIMETABLE_CACHE_KEY = "gurudock_timetable_cache";
-const TIMETABLE_CACHE_TTL = 24 * 60 * 60 * 1000;
 
 function getTimetableCacheKey() {
   const user = localStorage.getItem("user_email") || localStorage.getItem("user_name") || "authenticated";
@@ -30,7 +29,6 @@ function readTimetableCache() {
     const cached = JSON.parse(localStorage.getItem(getTimetableCacheKey()) || "null");
     if (
       !cached ||
-      Date.now() - cached.cachedAt > TIMETABLE_CACHE_TTL ||
       !Array.isArray(cached.entries) ||
       !Array.isArray(cached.groups)
     ) {

@@ -1,5 +1,4 @@
 const LIBRARY_CACHE_KEY = "gurudock_library_cache";
-export const LIBRARY_CACHE_TTL = 24 * 60 * 60 * 1000;
 
 function getLibraryCacheKey() {
   const user = localStorage.getItem("user_email") || localStorage.getItem("user_name") || "authenticated";
@@ -10,7 +9,7 @@ export function readLibraryCache(query = "") {
   try {
     const cached = JSON.parse(localStorage.getItem(getLibraryCacheKey()) || "{}");
     const entry = cached[query];
-    if (!entry || Date.now() - entry.cachedAt > LIBRARY_CACHE_TTL || !Array.isArray(entry.documents)) return [];
+    if (!entry || !Array.isArray(entry.documents)) return [];
     return entry.documents;
   } catch {
     return [];

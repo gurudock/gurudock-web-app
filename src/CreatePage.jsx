@@ -39,13 +39,12 @@ const modeTabs = {
 
 const CURRICULUM_CACHE_KEY = "gurudock_curriculum_cache";
 const CHAPTERS_CACHE_KEY = "gurudock_chapters_topics_cache";
-const CONTENT_CACHE_TTL = 24 * 60 * 60 * 1000;
 
 function readContentCache(key, entryKey = "default") {
   try {
     const cache = JSON.parse(localStorage.getItem(key) || "{}");
     const entry = cache[entryKey];
-    return entry && Date.now() - entry.cachedAt <= CONTENT_CACHE_TTL ? entry.data : null;
+    return entry ? entry.data : null;
   } catch {
     return null;
   }

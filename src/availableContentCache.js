@@ -1,5 +1,4 @@
 const AVAILABLE_CONTENT_CACHE_KEY = "gurudock_available_content_cache";
-const AVAILABLE_CONTENT_CACHE_TTL = 24 * 60 * 60 * 1000;
 
 function getCacheKey() {
   const user = localStorage.getItem("user_email") || localStorage.getItem("user_name") || "authenticated";
@@ -11,7 +10,6 @@ export function readAvailableContentCache() {
     const cached = JSON.parse(localStorage.getItem(getCacheKey()) || "null");
     if (
       !cached ||
-      Date.now() - cached.cachedAt > AVAILABLE_CONTENT_CACHE_TTL ||
       !cached.data ||
       typeof cached.data !== "object" ||
       Array.isArray(cached.data)

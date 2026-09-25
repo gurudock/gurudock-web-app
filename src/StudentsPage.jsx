@@ -5,7 +5,6 @@ import { API_BASE_URL, authenticatedFetch } from "./apiClient";
 import { readAvailableContentCache, writeAvailableContentCache } from "./availableContentCache";
 
 const STUDENTS_CACHE_KEY = "gurudock_students_cache";
-const STUDENTS_CACHE_TTL = 24 * 60 * 60 * 1000;
 
 function getStudentsCacheKey() {
   const user = localStorage.getItem("user_email") || localStorage.getItem("user_name") || "authenticated";
@@ -17,7 +16,6 @@ function readStudentsCache() {
     const cached = JSON.parse(localStorage.getItem(getStudentsCacheKey()) || "null");
     if (
       !cached ||
-      Date.now() - cached.cachedAt > STUDENTS_CACHE_TTL ||
       !Array.isArray(cached.students)
     ) {
       return null;
