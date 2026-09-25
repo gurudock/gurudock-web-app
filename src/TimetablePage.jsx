@@ -211,7 +211,7 @@ export default function TimetablePage() {
       } catch (error) {
         if (active) {
           showToast(cachedTimetable
-            ? "Unable to refresh the timetable. Showing the cached timetable."
+            ? "Unable to refresh the timetable."
             : error.message || "Unable to load the timetable.");
         }
       } finally {

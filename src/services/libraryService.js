@@ -3,9 +3,9 @@ import { API_BASE_URL, apiRequest, joinApiUrl } from "../apiClient";
 export const LIBRARY_ENDPOINTS = Object.freeze({
   collection: "/api/library",
   item: (contentType, contentId) => `/api/library/${encodeURIComponent(contentType)}/${encodeURIComponent(contentId)}`,
-  generatePdf: "/api/pdf/generate",
-  generateDocx: "/api/docx/generate",
-  generateAnswerKey: "/api/answer-key/generate",
+  generatePdf: "/pdf/generate",
+  generateDocx: "/docx/generate",
+  generateAnswerKey: "/answer-key/generate",
   lessonPlan: (lessonPlanId) => import.meta.env.DEV
     ? `/api/lesson-plan/${encodeURIComponent(lessonPlanId)}`
     : `/api/lesson-plan/${encodeURIComponent(lessonPlanId)}`,

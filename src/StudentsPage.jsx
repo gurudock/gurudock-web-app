@@ -166,7 +166,7 @@ export default function StudentsPage() {
       } catch (error) {
         if (active) {
           setStudentsError(cachedStudents
-            ? "Unable to refresh students. Showing the cached roster."
+            ? "Unable to refresh students.Please check your internet connection."
             : error.message || "Unable to load students.");
         }
       } finally {

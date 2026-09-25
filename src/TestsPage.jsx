@@ -117,7 +117,7 @@ export default function TestsPage() {
           writeCache(TESTS_CACHE_KEY, "tests", data);
         }
       } catch (error) {
-        if (active) setTestsError(cachedTests ? "Unable to refresh tests. Showing the cached list." : error.message || "Unable to load tests.");
+        if (active) setTestsError(cachedTests ? "Unable to refresh tests." : error.message || "Unable to load tests.");
       } finally {
         if (active) setTestsLoading(false);
       }
