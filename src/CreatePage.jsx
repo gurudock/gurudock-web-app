@@ -672,6 +672,9 @@ function StepTwo({ mode, chapters, chapterIndex, selectedAssignmentChapter, setS
   const chapter = chapters[chapterIndex];
   const allTopicsSelected = Boolean(chapter && chapter.selected.length === chapter.topics.length);
   const [openMobileChapters, setOpenMobileChapters] = useState([chapterIndex]);
+  const selectedChapters = chapters.filter((item) => item.selected.length);
+  const selectedChapterCount = selectedChapters.length;
+  const selectedTopicCount = selectedChapters.reduce((total, item) => total + item.selected.length, 0);
 
   function toggleMobileChapter(index) {
     if (mode !== "question") {
@@ -684,7 +687,229 @@ function StepTwo({ mode, chapters, chapterIndex, selectedAssignmentChapter, setS
       : [...current, index]);
   }
 
-  return <section className="generator-screen"><div className="generator-screen-head"><div><h2>{mode === "question" ? "Select chapters and topics" : "Chapters"}</h2>{mode === "question" && <p>Choose the chapters and specific topics you want to include in the question paper.</p>}</div><div className="generator-selected-count">Selected: <b>{mode === "question" ? chapters.filter((item) => item.selected.length).length : 1}</b> chapters{mode === "question" && <> • <b>{chapters.reduce((sum, item) => sum + item.selected.length, 0)}</b> topics</>}</div></div><div className="generator-mobile-chapters">{mode !== "question" && chapters.map((item, index) => { const isOpen = openMobileChapters.includes(index); const allSelected = item.selected.length === item.topics.length; const assignmentSelected = mode !== "question" && selectedAssignmentChapter === index; return <div className={`generator-mobile-chapter generator-mobile-chapter-${mode}`} key={item.name}><button className={`generator-chapter ${item.selected.length || assignmentSelected ? "selected" : ""}`} onClick={() => toggleMobileChapter(index)} type="button"><span className={`generator-checkbox ${item.selected.length || assignmentSelected ? "checked" : ""}`} onClick={(event) => { event.stopPropagation(); mode === "question" ? onToggleChapterTopics(index) : setSelectedAssignmentChapter(index); }} role="checkbox" aria-checked={mode === "question" ? allSelected : assignmentSelected} tabIndex={0} /><span><strong>{item.name}</strong></span><em>{mode === "question" ? `${item.selected.length}/${item.topics.length} topics` : ""}</em>{mode === "question" && <b>{isOpen ? "▴" : "▾"}</b>}</button>{mode === "question" && isOpen && <div className="generator-mobile-topics"><button className="generator-select-all" type="button" onClick={() => onSelectAllAt(index)}>{allSelected ? "Clear all" : "Select all"}</button>{item.topics.map((topic, topicIndex) => <button className="generator-topic" key={topic} title={topic} onClick={() => onToggleTopicAt(index, topicIndex)} type="button"><span className={`generator-checkbox ${item.selected.includes(topicIndex) ? "checked" : ""}`} /><span className="generator-topic-label">{topicIndex + 1}. {topic}</span></button>)}</div>}</div> })}</div><div className="generator-workspace">{mode === "question" ? <><div className="generator-column"><h3>Chapters</h3>{chapters.map((item, index) => <button className={`generator-chapter ${item.selected.length ? "selected" : ""}`} key={item.name} onClick={() => onSelectChapter(index)} type="button"><span className={`generator-checkbox ${item.selected.length ? "checked" : ""}`} onClick={(event) => { event.stopPropagation(); onToggleChapterTopics(index); }} role="checkbox" aria-checked={item.selected.length === item.topics.length} tabIndex={0} /> <span><strong>{item.name}</strong></span><em>{item.selected.length}/{item.topics.length} topics</em></button>)}</div><div className="generator-column"><div className="generator-topic-head"><div><h3>Topics</h3><small>{chapter.name}</small></div><button className="generator-select-all" type="button" onClick={onSelectAll}>{allTopicsSelected ? "Clear all" : "Select all"}</button></div>{chapter.topics.map((topic, index) => <button className="generator-topic" key={topic} title={topic} onClick={() => onToggle(index)} type="button"><span className={`generator-checkbox ${chapter.selected.includes(index) ? "checked" : ""}`} /><span className="generator-topic-label">{index + 1}. {topic}</span></button>)}</div>  <div className="generator-column generator-selection-column"><h3>Your selection</h3>{chapters.filter((item) => item.selected.length).map((item) => <div className="generator-selection" key={item.name}><div className="generator-selection-head"><strong>{item.name}</strong><span>{item.selected.length} topics</span><button type="button" onClick={() => onClearChapter(chapters.indexOf(item))}>×</button></div><ul>{item.selected.map((index) => <li key={index}>{item.topics[index]} <button type="button" onClick={() => onRemoveTopic(chapters.indexOf(item), index)}>×</button></li>)}</ul></div>)}{!chapters.some((item) => item.selected.length) && <div className="generator-selection-empty">No topics selected yet.</div>}</div></> : <div className="generator-assignment-wrapper"><div className="generator-assignment-grid">{chapters.map((item, index) => <button className={`generator-assignment-chapter ${selectedAssignmentChapter === index ? "selected" : ""}`} key={item.name} onClick={() => setSelectedAssignmentChapter(index)} type="button"><span className="generator-radio" /><span><strong>{item.name}</strong></span></button>)}</div></div>}</div><div className="generator-actions"><button className="generator-button" onClick={onBack}>← Back</button><button className="generator-button primary" onClick={onNext}>Next →</button></div></section>;
+  return (
+    <section className={`generator-screen ${mode === "question" ? "generator-selection-step" : ""}`}>
+      <div className="generator-screen-head">
+        <div>
+          <h2>{mode === "question" ? "Select chapters and topics" : "Chapters"}</h2>
+          {mode === "question" && <p>Choose the chapters and specific topics you want to include in the question paper.</p>}
+        </div>
+        <div className="generator-selected-count" aria-live="polite">
+          {mode === "question" ? (
+            <>
+              <span><b>{selectedChapterCount}</b> chapters</span>
+              <span><b>{selectedTopicCount}</b> topics</span>
+            </>
+          ) : (
+            <span><b>1</b> chapter</span>
+          )}
+        </div>
+      </div>
+
+      <div className="generator-mobile-chapters">
+        {chapters.map((item, index) => {
+          const isOpen = openMobileChapters.includes(index);
+          const allSelected = item.selected.length === item.topics.length;
+          const assignmentSelected = selectedAssignmentChapter === index;
+          return (
+            <div className={`generator-mobile-chapter generator-mobile-chapter-${mode}`} key={item.name}>
+              <button
+                className={`generator-chapter ${item.selected.length || assignmentSelected ? "selected" : ""}`}
+                onClick={() => toggleMobileChapter(index)}
+                type="button"
+              >
+                <span
+                  className={`generator-checkbox ${item.selected.length || assignmentSelected ? "checked" : ""}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    mode === "question" ? onToggleChapterTopics(index) : setSelectedAssignmentChapter(index);
+                  }}
+                  role="checkbox"
+                  aria-checked={mode === "question" ? allSelected : assignmentSelected}
+                  tabIndex={0}
+                />
+                <span><strong>{item.name}</strong></span>
+                <em>{mode === "question" ? `${item.selected.length}/${item.topics.length} topics` : ""}</em>
+                {mode === "question" && <b>{isOpen ? "▴" : "▾"}</b>}
+              </button>
+              {mode === "question" && isOpen && (
+                <div className="generator-mobile-topics">
+                  <button className="generator-select-all" type="button" onClick={() => onSelectAllAt(index)}>
+                    {allSelected ? "Clear all" : "Select all"}
+                  </button>
+                  {item.topics.map((topic, topicIndex) => (
+                    <button
+                      className="generator-topic"
+                      key={topic}
+                      title={topic}
+                      onClick={() => onToggleTopicAt(index, topicIndex)}
+                      type="button"
+                    >
+                      <span className={`generator-checkbox ${item.selected.includes(topicIndex) ? "checked" : ""}`} />
+                      <span className="generator-topic-label">{topicIndex + 1}. {topic}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="generator-workspace">
+        {mode === "question" ? (
+          <>
+            <div className="generator-column generator-chapters-column">
+              <div className="generator-panel-heading">
+                <div>
+                  <h3>Chapters</h3>
+                  <small>Choose what to include</small>
+                </div>
+                <span className="generator-panel-count">{chapters.length}</span>
+              </div>
+              <div className="generator-panel-list">
+                {chapters.map((item, index) => {
+                  const selected = item.selected.length > 0;
+                  const isActive = index === chapterIndex;
+                  return (
+                    <button
+                      className={`generator-chapter ${selected ? "selected" : ""} ${isActive ? "active" : ""}`}
+                      key={item.name}
+                      onClick={() => onSelectChapter(index)}
+                      type="button"
+                    >
+                      <span
+                        className={`generator-checkbox ${item.selected.length === item.topics.length ? "checked" : ""}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onToggleChapterTopics(index);
+                        }}
+                        role="checkbox"
+                        aria-checked={item.selected.length === item.topics.length}
+                        aria-label={`Select all topics in ${item.name}`}
+                        tabIndex={0}
+                      />
+                      <span className="generator-chapter-copy">
+                        <strong>{item.name}</strong>
+                        <small>{item.selected.length ? `${item.selected.length} topics selected` : "No topics selected"}</small>
+                      </span>
+                      <span className="generator-chapter-progress">{item.selected.length}/{item.topics.length}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="generator-column generator-topics-column">
+              <div className="generator-topic-head">
+                <div>
+                  <h3>Topics</h3>
+                  <small>{chapter?.name || "Select a chapter"}</small>
+                </div>
+                {chapter && (
+                  <button className="generator-select-all" type="button" onClick={onSelectAll}>
+                    {allTopicsSelected ? "Clear all" : "Select all"}
+                  </button>
+                )}
+              </div>
+              <div className="generator-panel-list">
+                {chapter?.topics.map((topic, index) => {
+                  const selected = chapter.selected.includes(index);
+                  return (
+                    <button
+                      className={`generator-topic ${selected ? "selected" : ""}`}
+                      key={topic}
+                      title={topic}
+                      onClick={() => onToggle(index)}
+                      type="button"
+                    >
+                      <span className={`generator-checkbox ${selected ? "checked" : ""}`} />
+                      <span className="generator-topic-label">{topic}</span>
+                      <span className="generator-topic-state">{selected ? "Selected" : ""}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="generator-column generator-selection-column">
+              <div className="generator-panel-heading">
+                <div>
+                  <h3>Your selection</h3>
+                  <small>{selectedTopicCount ? "Ready for your question paper" : "Topics you choose appear here"}</small>
+                </div>
+                {selectedTopicCount > 0 && <span className="generator-panel-count">{selectedTopicCount}</span>}
+              </div>
+              <div className="generator-selection-list">
+                {selectedChapters.map((item) => {
+                  const itemIndex = chapters.indexOf(item);
+                  return (
+                    <div className="generator-selection" key={item.name}>
+                      <div className="generator-selection-head">
+                        <strong>{item.name}</strong>
+                        <span>{item.selected.length}</span>
+                        <button
+                          type="button"
+                          onClick={() => onClearChapter(itemIndex)}
+                          aria-label={`Remove all selected topics from ${item.name}`}
+                          title="Remove chapter topics"
+                        >
+                          ×
+                        </button>
+                      </div>
+                      <ul>
+                        {item.selected.map((index) => (
+                          <li key={index}>
+                            <span>{item.topics[index]}</span>
+                            <button
+                              type="button"
+                              onClick={() => onRemoveTopic(itemIndex, index)}
+                              aria-label={`Remove ${item.topics[index]}`}
+                              title={`Remove ${item.topics[index]}`}
+                            >
+                              ×
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })}
+                {!selectedTopicCount && (
+                  <div className="generator-selection-empty">
+                    <span className="generator-selection-empty-icon" aria-hidden="true">＋</span>
+                    <strong>No topics selected yet</strong>
+                    <span>Choose a chapter, then select the topics to include.</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="generator-assignment-wrapper">
+            <div className="generator-assignment-grid">
+              {chapters.map((item, index) => (
+                <button
+                  className={`generator-assignment-chapter ${selectedAssignmentChapter === index ? "selected" : ""}`}
+                  key={item.name}
+                  onClick={() => setSelectedAssignmentChapter(index)}
+                  type="button"
+                >
+                  <span className="generator-radio" />
+                  <span><strong>{item.name}</strong></span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="generator-actions">
+        <button className="generator-button" onClick={onBack}>← Back</button>
+        <button className="generator-button primary" onClick={onNext}>Next →</button>
+      </div>
+    </section>
+  );
 }
 
 function StepThree({ mode, sections, collapsedSections, questionTypes, chapter, assignmentMaxMarks, onAssignmentMaxMarksChange, onToggleSection, onToggleQuestionType, onUpdate, onRemove, onAdd, onBack, onNext }) {
