@@ -94,7 +94,9 @@ export default function CreatePage({ initialMode = null }) {
   const [userName, setUserName] = useState(() => localStorage.getItem("user_name") || "Teacher");
   const [chaptersError, setChaptersError] = useState("");
   const details = modeDetails[mode];
-  const duration = durationValue ? `${durationValue} ${durationUnit}` : "";
+  const duration = durationValue
+    ? `${durationValue} ${durationUnit.charAt(0).toUpperCase()}${durationUnit.slice(1)}`
+    : "";
   const initials = userName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
 
   useEffect(() => {

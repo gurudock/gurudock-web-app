@@ -11,6 +11,26 @@ export default defineConfig({
     allowedHosts: [".ngrok-free.app", ".ngrok-free.dev"],
 
     proxy: {
+      "/question-paper": {
+        target: "https://testing.api.gurudock.com",
+        changeOrigin: true,
+        secure: true,
+      },
+      "/assignment": {
+        target: "https://testing.api.gurudock.com",
+        changeOrigin: true,
+        secure: true,
+      },
+      "/api/lesson-plan": {
+        target: "https://testing.api.gurudock.com",
+        changeOrigin: true,
+        secure: true,
+      },
+      "/api/feedback": {
+        target: "https://testing.api.gurudock.com",
+        changeOrigin: true,
+        secure: true,
+      },
       "/api": {
         target: "https://testing.api.gurudock.com",
         changeOrigin: true,
