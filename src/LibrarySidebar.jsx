@@ -22,6 +22,7 @@ export default function LibrarySidebar({ activeItem = "library" }) {
         <LibraryNavItem href="/create" label="Create" icon="create" active={activeItem === "create"} />
         <LibraryNavItem href="/briefing" label="Briefing" icon="briefing" active={activeItem === "briefing"} />
         <LibraryNavItem href="/library" label="Library" icon="library" active={activeItem === "library"} />
+        {authenticated && <LibraryNavItem className="library-mobile-profile-nav-item" href="/profile" label="Profile" icon="profile" active={activeItem === "profile"} />}
         <LibraryNavItem href="/students" label="Students" icon="students" active={activeItem === "students"} />
         <LibraryNavItem href="/tests" label="Tests" icon="tests" active={activeItem === "tests"} />
         <LibraryNavItem href="/timetable" label="Time table" icon="timetable" active={activeItem === "timetable"} />

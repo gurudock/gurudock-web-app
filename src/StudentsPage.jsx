@@ -121,6 +121,7 @@ function getApiError(data, fallback) {
 }
 
 export default function StudentsPage() {
+  const [userName, setUserName] = useState(() => localStorage.getItem("user_name") || "Teacher");
   const [students, setStudents] = useState([]);
   const [studentsLoading, setStudentsLoading] = useState(true);
   const [studentsError, setStudentsError] = useState("");
@@ -142,6 +143,16 @@ export default function StudentsPage() {
   const [studentSaving, setStudentSaving] = useState(false);
   const [availableClasses, setAvailableClasses] = useState([]);
   const [studentEditForm, setStudentEditForm] = useState({ name: "", className: "", section: "", roll: "" });
+
+  useEffect(() => {
+    const syncUser = () => setUserName(localStorage.getItem("user_name") || "Teacher");
+    window.addEventListener("auth-changed", syncUser);
+    window.addEventListener("storage", syncUser);
+    return () => {
+      window.removeEventListener("auth-changed", syncUser);
+      window.removeEventListener("storage", syncUser);
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -441,7 +452,7 @@ export default function StudentsPage() {
         <header className="home-topbar">
           <div><span className="home-topbar-eyebrow">Teacher workspace</span><h1>Students</h1></div>
           <a className="home-mobile-brand" href="/home" aria-label="GuruDock home"><img src={logoUrl} alt="" /><strong>GuruDock</strong></a>
-          <div className="home-topbar-user"><span className="home-avatar">M</span><strong>Ms</strong></div>
+          <div className="home-topbar-user"><span className="home-avatar">{userName.trim().charAt(0).toUpperCase() || "T"}</span><strong>{userName}</strong></div>
         </header>
         <section className="students-content">
           <div className="students-tabs">

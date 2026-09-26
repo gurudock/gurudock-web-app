@@ -58,6 +58,7 @@ const studentMatchesTest = (student, test) =>
   normalizeSection(student.class_section) === normalizeSection(test.class_section);
 
 export default function TestsPage() {
+  const [userName, setUserName] = useState(() => localStorage.getItem("user_name") || "Teacher");
   const [form, setForm] = useState({
     title: "",
     subject: "",
@@ -83,6 +84,16 @@ export default function TestsPage() {
   const [marksSaving, setMarksSaving] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(null);
+
+  useEffect(() => {
+    const syncUser = () => setUserName(localStorage.getItem("user_name") || "Teacher");
+    window.addEventListener("auth-changed", syncUser);
+    window.addEventListener("storage", syncUser);
+    return () => {
+      window.removeEventListener("auth-changed", syncUser);
+      window.removeEventListener("storage", syncUser);
+    };
+  }, []);
 
   const updateField = (field, value) => setForm((current) => ({ ...current, [field]: value }));
 
@@ -341,7 +352,7 @@ export default function TestsPage() {
         <header className="home-topbar">
           <div><span className="home-topbar-eyebrow">Teacher workspace</span><h1>Create Test</h1></div>
           <a className="home-mobile-brand" href="/home" aria-label="GuruDock home"><img src={logoUrl} alt="" /><strong>GuruDock</strong></a>
-          <div className="home-topbar-user"><span className="home-avatar">M</span><strong>Ms</strong></div>
+          <div className="home-topbar-user"><span className="home-avatar">{userName.trim().charAt(0).toUpperCase() || "T"}</span><strong>{userName}</strong></div>
         </header>
         <section className="students-content">
           <div className="tests-intro"><div><div className="students-eyebrow">ASSESSMENT</div><h2>Set up a test</h2><p>Create a test record for a class so marks can be entered and tracked later.</p></div></div>

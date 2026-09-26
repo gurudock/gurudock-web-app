@@ -2636,6 +2636,10 @@ form {
   text-align: center;
 }
 
+.library-sidebar nav .library-mobile-profile-nav-item {
+  display: none;
+}
+
 .library-sidebar nav a:hover,
 .library-sidebar nav a.active,
 .library-sidebar-bottom a:hover,
@@ -8472,6 +8476,7 @@ form {
   display: flex;
   justify-content: space-between;
   gap: 8px;
+  font-size: 15px;
 }
 
 .profile-field small {
@@ -8947,7 +8952,6 @@ form {
 }
 
 .profile-section-title {
-  margin: 0 0 16px;
   color: #5a331b;
   font-family: "Work Sans", system-ui, sans-serif;
   font-size: 15px;
@@ -9920,6 +9924,10 @@ form {
     font-weight: 600;
     gap: 4px;
     padding: 6px 0;
+  }
+
+  .library-sidebar nav .library-mobile-profile-nav-item {
+    display: flex;
   }
 
   .library-sidebar nav a .library-nav-svg,
