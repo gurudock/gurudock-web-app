@@ -262,9 +262,6 @@ export default function CreatePage({ initialMode = null }) {
 
   function selectChapter(index) {
     setChapterIndex(index);
-    if (chapterData[index].selected.length) {
-      clearChapter(index);
-    }
   }
 
   function toggleChapterTopics(index) {
@@ -719,13 +716,15 @@ function StepTwo({ mode, chapters, chapterIndex, selectedAssignmentChapter, setS
                 type="button"
               >
                 <span
-                  className={`generator-checkbox ${item.selected.length || assignmentSelected ? "checked" : ""}`}
+                  className={`generator-checkbox ${mode === "question"
+                    ? item.selected.length ? "checked" : ""
+                    : assignmentSelected ? "checked" : ""}`}
                   onClick={(event) => {
                     event.stopPropagation();
                     mode === "question" ? onToggleChapterTopics(index) : setSelectedAssignmentChapter(index);
                   }}
                   role="checkbox"
-                  aria-checked={mode === "question" ? allSelected : assignmentSelected}
+                  aria-checked={mode === "question" ? item.selected.length > 0 && !allSelected ? "mixed" : allSelected : assignmentSelected}
                   tabIndex={0}
                 />
                 <span><strong>{item.name}</strong></span>
@@ -770,6 +769,7 @@ function StepTwo({ mode, chapters, chapterIndex, selectedAssignmentChapter, setS
               <div className="generator-panel-list">
                 {chapters.map((item, index) => {
                   const selected = item.selected.length > 0;
+                  const allSelected = item.selected.length === item.topics.length;
                   const isActive = index === chapterIndex;
                   return (
                     <button
@@ -779,13 +779,13 @@ function StepTwo({ mode, chapters, chapterIndex, selectedAssignmentChapter, setS
                       type="button"
                     >
                       <span
-                        className={`generator-checkbox ${item.selected.length === item.topics.length ? "checked" : ""}`}
+                        className={`generator-checkbox ${selected ? "checked" : ""}`}
                         onClick={(event) => {
                           event.stopPropagation();
                           onToggleChapterTopics(index);
                         }}
                         role="checkbox"
-                        aria-checked={item.selected.length === item.topics.length}
+                        aria-checked={selected && !allSelected ? "mixed" : allSelected}
                         aria-label={`Select all topics in ${item.name}`}
                         tabIndex={0}
                       />

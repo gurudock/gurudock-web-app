@@ -98,11 +98,21 @@ export default function TimetablePage() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [clearRequested, setClearRequested] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState("");
+  const [selectedPeriod, setSelectedPeriod] = useState(null);
   useEffect(() => {
     const syncUser = () => setUserName(localStorage.getItem("user_name") || "Teacher");
     window.addEventListener("auth-changed", syncUser);
     return () => window.removeEventListener("auth-changed", syncUser);
   }, []);
+
+  useEffect(() => {
+    if (!selectedPeriod) return undefined;
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") setSelectedPeriod(null);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [selectedPeriod]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -463,18 +473,30 @@ export default function TimetablePage() {
   const tableRows = PERIODS.map(([periodCode, periodTime]) => {
     const displayedPeriodTime = savedEntries.find((entry) => entry.period === periodCode && entry.periodTime)?.periodTime || periodTime;
     const cells = DAYS.map((day) => {
-      const key = `${day}|${periodCode}`;
       const matches = savedEntries.filter(
         (entry) => entry.day === day && entry.period === periodCode,
       );
-      const label = matches.length
-        ? matches
-            .map(
-              (entry) => `<div class="lesson"><b>${getEntryClassLabel(entry)}</b><span>${entry.subject}</span>${hasRoom(entry) ? `<span>Room ${entry.room}</span>` : ""}</div>`,
-            )
-            .join("")
-        : "";
-      return <td key={`${day}-${periodCode}`} dangerouslySetInnerHTML={{ __html: label }} />;
+      const periodLabel = `${day}, ${displayedPeriodTime}, ${periodCode}`;
+      return (
+        <td key={`${day}-${periodCode}`}>
+          {matches.length ? (
+            <button
+              className="timetable-period-trigger"
+              type="button"
+              aria-label={`${periodLabel}, ${matches.length} ${matches.length === 1 ? "class" : "classes"} scheduled`}
+              onClick={() => setSelectedPeriod({ day, period: periodCode })}
+            >
+              {matches.map((entry, index) => (
+                <div className="lesson" key={entry.id || `${entry.className}-${entry.subject}-${entry.room}-${index}`}>
+                  <b>{getEntryClassLabel(entry)}</b>
+                  <span>{entry.subject}</span>
+                  {hasRoom(entry) ? <span>Room {entry.room}</span> : null}
+                </div>
+              ))}
+            </button>
+          ) : null}
+        </td>
+      );
     });
     return (
       <React.Fragment key={periodCode}>
@@ -600,14 +622,20 @@ export default function TimetablePage() {
                       {dayEntries.length ? dayEntries.map((entry) => {
                         const periodTime = entry.periodTime || PERIODS.find(([period]) => period === entry.period)?.[1] || "";
                         return (
-                          <div className="mobile-lesson" key={`${entry.day}-${entry.period}-${entry.className}-${entry.subject}`}>
+                          <button
+                            className="mobile-lesson"
+                            key={`${entry.day}-${entry.period}-${entry.className}-${entry.subject}`}
+                            type="button"
+                            aria-label={`${entry.day}, ${periodTime}, ${entry.period}: ${getEntryClassLabel(entry)}, ${entry.subject}${hasRoom(entry) ? `, Room ${entry.room}` : ""}`}
+                            onClick={() => setSelectedPeriod({ day: entry.day, period: entry.period })}
+                          >
                             <div className="mobile-time">{periodTime}<br />{entry.period}</div>
                             <div className="mobile-lesson-content">
                               <b>{getEntryClassLabel(entry)}</b>
                               <span>{entry.subject}</span>
                               {hasRoom(entry) ? <span>Room {entry.room}</span> : null}
                             </div>
-                          </div>
+                          </button>
                         );
                       }) : <div className="mobile-empty-day">No classes scheduled</div>}
                     </section>
@@ -760,6 +788,48 @@ export default function TimetablePage() {
     </div>
 
     <div className={`toast ${toastText ? "show" : ""}`}>{toastText}</div>
+    {selectedPeriod ? (() => {
+      const periodTime = savedEntries.find((entry) => entry.day === selectedPeriod.day && entry.period === selectedPeriod.period)?.periodTime
+        || PERIODS.find(([period]) => period === selectedPeriod.period)?.[1]
+        || "";
+      const entries = savedEntries.filter((entry) => entry.day === selectedPeriod.day && entry.period === selectedPeriod.period);
+      return (
+        <div className="period-details-backdrop" role="presentation" onClick={() => setSelectedPeriod(null)}>
+          <div
+            className="period-details-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="period-details-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="period-details-header">
+              <div>
+                <span>{selectedPeriod.day} · {selectedPeriod.period}</span>
+                <h2 id="period-details-title">Period details</h2>
+                <p>{periodTime}</p>
+              </div>
+              <button className="period-details-close" type="button" aria-label="Close period details" onClick={() => setSelectedPeriod(null)}>×</button>
+            </div>
+            {entries.length ? (
+              <div className="period-details-list">
+                {entries.map((entry, index) => (
+                  <article className="period-details-entry" key={entry.id || `${entry.className}-${entry.subject}-${entry.room}-${index}`}>
+                    <h3>{getEntryClassLabel(entry)}</h3>
+                    <p><strong>Subject</strong><span>{entry.subject}</span></p>
+                    <p><strong>Room</strong><span>{hasRoom(entry) ? entry.room : "Not specified"}</span></p>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="period-details-empty">No class is scheduled for this period.</p>
+            )}
+            <div className="period-details-actions">
+              <button className="primary" type="button" onClick={() => setSelectedPeriod(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      );
+    })() : null}
     {pendingNavigation ? (
       <div className="unsaved-modal-backdrop" role="presentation">
         <div className="unsaved-modal" role="dialog" aria-modal="true" aria-labelledby="unsaved-timetable-title">
